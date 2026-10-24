@@ -1,0 +1,19 @@
+:root {
+  --midnight: #151936;
+  --bone: #e8e2d6;
+  --dusk: #9ca3bc; /* about 6.7:1 on midnight */
+  --hairline: rgba(232, 226, 214, 0.16);
+
+  /* Scent families. Colour is reserved for these. */
+  --fam-citrus: #d8c27a;
+  --fam-green: #8fa67f;
+  --fam-aquatic: #7fa8b0;
+  --fam-floral: #c98e9a;
+  --fam-woody: #a88866;
+  --fam-amber: #c47b55;
+
+  --serif: 'Cormorant Garamond', 'Iowan Old Style', Georgia, serif;
+  --sans: Manrope, system-ui, sans-serif;
+
+  --gutter: clamp(16px, 4vw, 56px);
+}
