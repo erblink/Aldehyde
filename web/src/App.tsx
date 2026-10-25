@@ -1,4 +1,5 @@
 import type { Family } from './api/types'
+import Drops from './Drops'
 
 const FAMILIES: { id: Family; name: string }[] = [
   { id: 'citrus', name: 'Citrus' },
@@ -32,9 +33,10 @@ function Opening() {
         <h1 id="opening-title" className="opening-title">
           Every perfume, placed by what is in the bottle.
         </h1>
-        <p className="opening-hint" aria-hidden="true">
-          Scroll to pull back
-        </p>
+        <div className="opening-hint">
+          <p>Drag the families around. Where they overlap, they mix.</p>
+          <p aria-hidden="true">Scroll to pull back</p>
+        </div>
       </div>
     </section>
   )
@@ -45,8 +47,8 @@ function FamilyKey() {
   return (
     <ul className="family-key" aria-label="Scent families">
       {FAMILIES.map((f) => (
-        <li key={f.id}>
-          <span className="swatch" aria-hidden="true" style={{ background: `var(--fam-${f.id})` }} />
+        <li key={f.id} data-family={f.id}>
+          <span className="swatch" aria-hidden="true" style={{ '--c': `var(--fam-${f.id})` } as React.CSSProperties} />
           {f.name}
         </li>
       ))}
@@ -78,6 +80,7 @@ export default function App() {
       <main>
         <Opening />
         <MapFrame />
+        <Drops />
       </main>
     </>
   )

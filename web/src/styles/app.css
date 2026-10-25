@@ -115,10 +115,88 @@ a:hover {
   text-wrap: balance;
 }
 
+.opening-title,
+.opening header {
+  position: relative;
+  z-index: 2; /* above the drops */
+}
+
 .opening-hint {
-  margin: 0 0 8px;
+  position: relative;
+  z-index: 2;
+  max-width: 26ch;
+  padding-bottom: 8px;
   font-size: 13px;
   color: var(--dusk);
+}
+
+.opening-hint p {
+  margin: 0;
+}
+
+.opening-hint p + p {
+  margin-top: 14px;
+}
+
+/* Drops: one translucent disc per family, tinted like perfume glass. They blend where they overlap. */
+.drops {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 0;
+  isolation: isolate;
+  z-index: 1;
+}
+
+.drop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--c) 70%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c) 28%, transparent);
+  mix-blend-mode: screen;
+  cursor: grab;
+  touch-action: none;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.drop.held {
+  cursor: grabbing;
+  border-color: var(--c);
+}
+
+.drop.pulled {
+  pointer-events: none;
+}
+
+.drop-name {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--bone);
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+  pointer-events: none;
+}
+
+.drop:hover .drop-name,
+.drop:focus-visible .drop-name,
+.drop.held .drop-name {
+  opacity: 1;
+}
+
+.drop.pulled .drop-name {
+  opacity: 0;
+}
+
+::selection {
+  background: rgba(232, 226, 214, 0.22);
 }
 
 /* Frame 2: full map */
@@ -172,10 +250,13 @@ a:hover {
   font-size: 13px;
 }
 
+/* Same glass as the drops, so a drop lands on its swatch when you scroll. */
 .family-key .swatch {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--c) 70%, transparent);
+  background: color-mix(in srgb, var(--c) 40%, transparent);
 }
 
 .data-note {

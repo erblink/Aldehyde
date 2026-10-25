@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Aldehyde.Data;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -78,10 +79,14 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
         readonly string dbPath = Path.Combine(Path.GetTempPath(), $"aldehyde-api-{Guid.NewGuid()}.db");
         bool seeded;
 
+        // "Testing" skips user-secrets, and the empty Postgres string keeps tests off Neon.
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder) =>
-            builder.ConfigureAppConfiguration((_, cfg) =>
+            builder.UseEnvironment("Testing").ConfigureAppConfiguration((_, cfg) =>
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
-                { ["ConnectionStrings:Default"] = $"Data Source={dbPath}" }));
+                {
+                    ["ConnectionStrings:Default"] = $"Data Source={dbPath}",
+                    ["ConnectionStrings:Postgres"] = "",
+                }));
 
         public void Seed()
         {

@@ -1,6 +1,5 @@
 namespace Aldehyde.Api;
 
-// Shapes match web/src/api/types.ts. Change both sides together.
 public record MapPoint(int Id, string Name, string House, string Family, double X, double Y);
 public record Neighbour(int Id, string Name, List<string> SharedNotes);
 public record Dupe(int Id, string Name, string Source, int Votes, List<string> SharedNotes);
