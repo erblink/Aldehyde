@@ -10,7 +10,7 @@ builder.Services.AddDbContext<AppDbContext>((sp, o) =>
 {
     var cfg = sp.GetRequiredService<IConfiguration>();
     var postgres = cfg.GetConnectionString("Postgres");
-    if (!string.IsNullOrEmpty(postgres)) o.UseNpgsql(postgres);
+    if (!string.IsNullOrEmpty(postgres)) o.UseNpgsql(postgres, n => n.EnableRetryOnFailure());
     else o.UseSqlite(cfg.GetConnectionString("Default") ?? "Data Source=aldehyde.db");
 });
 builder.Services.AddSingleton<PerfumeCache>();

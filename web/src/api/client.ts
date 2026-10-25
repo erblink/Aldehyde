@@ -8,10 +8,25 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function snapshot() {
+  const res = await fetch('/points.json')
+  if (!res.ok || !res.headers.get('content-type')?.includes('json')) throw new Error('no snapshot')
+  const points = (await res.json()) as MapPoint[]
+  if (!points.length) throw new Error('empty snapshot')
+  return points
+}
+
+let points: Promise<MapPoint[]> | null = null
 const details = new Map<number, Promise<PerfumeDetail>>()
 
 export const api = {
-  points: () => get<MapPoint[]>('/api/perfumes'),
+  points: () =>
+    (points ??= snapshot()
+      .catch(() => get<MapPoint[]>('/api/perfumes'))
+      .catch((e) => {
+        points = null
+        throw e
+      })),
   detail: (id: number) => {
     let p = details.get(id)
     if (!p) {
@@ -23,4 +38,7 @@ export const api = {
   },
   search: (q: string, signal?: AbortSignal) =>
     get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`, signal),
+  warm: () => {
+    fetch(`${base}/api/perfumes/0`).catch(() => {})
+  },
 }

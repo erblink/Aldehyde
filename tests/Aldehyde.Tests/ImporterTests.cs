@@ -80,6 +80,15 @@ public class ImporterTests : IDisposable
         Assert.DoesNotContain("Low", names);
     }
 
+    [Theory]
+    [InlineData("Sauvage Eau de Parfum", "Eau de Parfum")]
+    [InlineData("Chanel No 5 Parfum", "Parfum")]
+    [InlineData("J'adore Parfum d'Eau", null)]
+    [InlineData("Light Blue", null)]
+    [InlineData("Neroli Eau Fraiche", "Eau Fraîche")]
+    public void ConcentrationComesOnlyFromTheName(string name, string? expected) =>
+        Assert.Equal(expected, PerfumeImporter.Concentration(name));
+
     [Fact]
     public async Task RepeatedPerfumeKeepsHigherRatedRow()
     {

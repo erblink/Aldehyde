@@ -1,29 +1,51 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aldehyde.Data;
 
-public class MapLayout(AppDbContext db)
+public class MapLayout(AppDbContext db, string? cachePath = null)
 {
     public const int NeighbourCount = 5;
 
+    record Layout(int[] Ids, double[] X, double[] Y, int[][] Nearest);
+
     public async Task<string> ComputeAsync()
     {
-        var all = await db.Perfumes.OrderBy(p => p.Id).ToListAsync();
-        if (all.Count < 2) return "Need at least 2 perfumes. Coordinates not computed.";
-        var vecs = all.Select(p => p.Embedding).ToArray();
-        if (vecs.Any(v => v is null)) return "Not all perfumes embedded. Coordinates not computed.";
+        var ids = await db.Perfumes.AsNoTracking().OrderBy(p => p.Id).Select(p => p.Id).ToArrayAsync();
+        if (ids.Length < 2) return "Need at least 2 perfumes. Coordinates not computed.";
 
-        var unit = vecs.Select(v => Normalise(v!)).ToArray();
-        var (xs, ys) = Umap2(unit);
-        var nx = Scale(xs); var ny = Scale(ys);
-        var nearest = Nearest(unit, NeighbourCount);
-        for (var i = 0; i < all.Count; i++)
+        var layout = cachePath is not null && File.Exists(cachePath)
+            ? JsonSerializer.Deserialize<Layout>(await File.ReadAllTextAsync(cachePath))
+            : null;
+        if (layout is null || !layout.Ids.SequenceEqual(ids))
         {
-            all[i].X = nx[i]; all[i].Y = ny[i];
-            all[i].NeighbourIds = nearest[i].Select(j => all[j].Id).ToList();
+            var rows = await db.Perfumes.AsNoTracking().OrderBy(p => p.Id).Select(p => p.EmbeddingJson).ToListAsync();
+            if (rows.Count != ids.Length || rows.Any(r => r is null)) return "Not all perfumes embedded. Coordinates not computed.";
+            var unit = rows.Select(r => Normalise(JsonSerializer.Deserialize<float[]>(r!)!)).ToArray();
+            rows.Clear();
+            var (xs, ys) = Umap2(unit);
+            layout = new Layout(ids, Scale(xs), Scale(ys), Nearest(unit, NeighbourCount));
+            if (cachePath is not null) await File.WriteAllTextAsync(cachePath, JsonSerializer.Serialize(layout));
         }
-        await db.SaveChangesAsync();
-        return $"Coordinates set for {all.Count}.";
+
+        Npgsql.NpgsqlConnection.ClearAllPools();
+        db.ChangeTracker.Clear();
+        var (nx, ny, nearest) = (layout.X, layout.Y, layout.Nearest);
+        foreach (var chunk in Enumerable.Range(0, ids.Length).Chunk(500))
+        {
+            foreach (var i in chunk)
+            {
+                var p = new Perfume { Id = ids[i], X = nx[i], Y = ny[i], NeighbourIds = nearest[i].Select(j => ids[j]).ToList() };
+                var entry = db.Attach(p);
+                entry.Property(x => x.X).IsModified = true;
+                entry.Property(x => x.Y).IsModified = true;
+                entry.Property(x => x.NeighbourIds).IsModified = true;
+            }
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+        }
+        if (cachePath is not null) File.Delete(cachePath);
+        return $"Coordinates set for {ids.Length}.";
     }
 
     static (double[] Xs, double[] Ys) Umap2(float[][] vecs)

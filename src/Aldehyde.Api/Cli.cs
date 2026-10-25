@@ -21,7 +21,7 @@ static class Cli
                 ["import", var path, var limit] when int.TryParse(limit, out var n) => await new PerfumeImporter(db).ImportAsync(path, n),
                 ["import-dupes", var path] => await new DupeImporter(db).ImportAsync(path),
                 ["embed"] => await EmbedAsync(db, cfg),
-                ["coords"] => await new MapLayout(db).ComputeAsync(),
+                ["coords"] => await new MapLayout(db, Path.Combine(Path.GetTempPath(), "aldehyde-coords.json")).ComputeAsync(),
                 _ => Usage,
             };
         }

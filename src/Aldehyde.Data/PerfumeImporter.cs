@@ -38,7 +38,7 @@ public class PerfumeImporter(AppDbContext db)
             }
             var embeddedText = Embedder.BuildText(p);
             p.Name = r.Name.Trim(); p.House = (r.House ?? "").Trim();
-            p.Year = r.Year; p.Strength = r.Strength; p.Ratings = r.RatingsValue;
+            p.Year = r.Year; p.Strength = r.Strength ?? Concentration(p.Name); p.Ratings = r.RatingsValue;
             p.Perfumers = r.Perfumers ?? []; p.Accords = accords;
             p.Family = FamilyClassifier.Classify(accords);
             p.TopNotes = r.Notes?.Top ?? r.TopNotes ?? [];
@@ -50,6 +50,19 @@ public class PerfumeImporter(AppDbContext db)
         var counts = db.Perfumes.GroupBy(p => p.Family).Select(g => $"{g.Key}:{g.Count()}");
         var topUnmapped = unmapped.OrderByDescending(kv => kv.Value).Take(20).Select(kv => $"{kv.Key}:{kv.Value}");
         return $"Imported {imported} of {rows.Count} ({selected.Count - imported} repeats skipped). Families: {string.Join(", ", counts)}. Fallbacks: {fallbacks}. Unmapped: {string.Join(", ", topUnmapped)}";
+    }
+
+    public static string? Concentration(string name)
+    {
+        foreach (var (phrase, label) in new[]
+        {
+            ("Extrait de Parfum", "Extrait de Parfum"), ("Eau de Parfum", "Eau de Parfum"), ("Eau de Toilette", "Eau de Toilette"),
+            ("Eau de Cologne", "Eau de Cologne"), ("Eau Fraîche", "Eau Fraîche"), ("Eau Fraiche", "Eau Fraîche"),
+        })
+            if (name.Contains(phrase, StringComparison.OrdinalIgnoreCase)) return label;
+        foreach (var (word, label) in new[] { ("Extrait", "Extrait de Parfum"), ("Parfum", "Parfum"), ("Cologne", "Cologne") })
+            if (name.EndsWith(" " + word, StringComparison.OrdinalIgnoreCase)) return label;
+        return null;
     }
 
     internal static string Key(string name, string house) => $"{name.Trim().ToLowerInvariant()}|{house.Trim().ToLowerInvariant()}";

@@ -1,15 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import DeckGL from '@deck.gl/react'
 import { LinearInterpolator, OrthographicView, type PickingInfo } from '@deck.gl/core'
 import { LineLayer, ScatterplotLayer } from '@deck.gl/layers'
 import { api } from './api/client'
 import type { Family, MapPoint, Neighbour, PerfumeDetail, SearchResult } from './api/types'
 import Detail from './Detail'
-import { FAMILIES } from './families'
+import { FAMILIES, familyColours, type RGB } from './families'
 import Search from './Search'
 import { shares } from './text'
 
-type RGB = [number, number, number]
 type View = {
   target: [number, number] | [number, number, number]
   zoom: number
@@ -22,21 +21,12 @@ const VIEW = new OrthographicView({ id: 'map' })
 const FLY = new LinearInterpolator(['target', 'zoom'])
 const BONE: RGB = [232, 226, 214]
 const NARROW = 760
+const COLUMN = 0.58
 const NONE: Neighbour[] = []
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
-const fitZoom = (w: number, h: number) => Math.log2(Math.max(1, Math.min(w * 0.9, (h - 150) * 0.9)) / 1000)
+const fitZoom = (w: number, h: number) => Math.log2(Math.max(1, Math.min(w * 0.92, h - 130)) / 1000)
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-function familyColours() {
-  const css = getComputedStyle(document.documentElement)
-  return Object.fromEntries(
-    FAMILIES.map(({ id }) => {
-      const hex = css.getPropertyValue(`--fam-${id}`).trim().slice(1)
-      return [id, [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16))]
-    }),
-  ) as Record<Family, RGB>
-}
 
 function familyAnchors(points: MapPoint[]) {
   const cells = new Map<string, { family: Family; n: number; x: number; y: number }>()
@@ -70,7 +60,9 @@ export default function MapFrame() {
   const [selected, setSelected] = useState<number | null>(null)
   const [detail, setDetail] = useState<PerfumeDetail | { failedId: number } | null>(null)
   const [attempt, setAttempt] = useState(0)
-  const [detailHeight, setDetailHeight] = useState(0)
+  const [home, setHome] = useState<View | null>(null)
+  const [revealed, setRevealed] = useState(false)
+  const [settled, setSettled] = useState(false)
   const colours = useMemo(() => familyColours(), [])
 
   useEffect(() => {
@@ -81,7 +73,13 @@ export default function MapFrame() {
     const el = stageRef.current!
     const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }))
     ro.observe(el)
-    const io = new IntersectionObserver(([e]) => setInView(e.intersectionRatio > 0.9), { threshold: [0, 0.9, 1] })
+    const io = new IntersectionObserver(
+      ([e]) => {
+        setInView(e.intersectionRatio > 0.9)
+        if (e.intersectionRatio > 0.25) setRevealed(true)
+      },
+      { threshold: [0, 0.25, 0.9, 1] },
+    )
     io.observe(el)
     return () => {
       ro.disconnect()
@@ -89,8 +87,16 @@ export default function MapFrame() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!revealed) return
+    const t = setTimeout(() => setSettled(true), 1500)
+    return () => clearTimeout(t)
+  }, [revealed])
+
   const fit = size.w ? fitZoom(size.w, size.h) : 0
   const wide = size.w >= NARROW
+  const split = wide && selected != null
+  const edge = split ? size.w * COLUMN : size.w - 90
   const view = useMemo<View | null>(() => moved ?? (size.w ? { target: [500, 500], zoom: fit } : null), [moved, size.w, fit])
   const current =
     selected == null || !detail
@@ -121,18 +127,9 @@ export default function MapFrame() {
     }
   }, [selected, attempt])
 
-  useLayoutEffect(() => {
-    setDetailHeight(detailRef.current?.offsetHeight ?? 0)
+  useEffect(() => {
     if (current && !wide) detailRef.current?.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' })
   }, [current, wide])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelected(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
 
   const byId = useMemo(() => new Map((points ?? []).map((p) => [p.id, p])), [points])
   const visible = useMemo(() => (points ?? []).filter((p) => !hidden.has(p.family)), [points, hidden])
@@ -169,7 +166,7 @@ export default function MapFrame() {
       if (reserved.has(p.id)) continue
       const x = (p.x - view.target[0]) * scale + size.w / 2
       const y = (p.y - view.target[1]) * scale + size.h / 2
-      if (x < 0 || y < 70 || x > size.w - 90 || y > size.h - 20) continue
+      if (x < 0 || y < 70 || x > edge || y > size.h - 20 || (x < 200 && y > size.h - 230)) continue
       const box = [x - 4, y - 11, x + 12 + p.name.length * 6.6, y + 11]
       if (taken.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue
       taken.push(box)
@@ -177,7 +174,7 @@ export default function MapFrame() {
       if (out.length >= max) break
     }
     return out
-  }, [view, size, fit, byRank, reserved])
+  }, [view, size, fit, byRank, reserved, edge])
 
   const lines = useMemo(() => {
     const out: Line[] = []
@@ -197,7 +194,7 @@ export default function MapFrame() {
     return out
   }, [byId, hidden, selPoint, hovPoint, selNeighbours, hovNeighbours, hovered, selected])
 
-  const radius = view ? clamp(2 * 1.3 ** (view.zoom - fit), 2, 5) : 2
+  const radius = view ? clamp(1.7 * 1.3 ** (view.zoom - fit), 1.7, 4.5) : 1.7
 
   const layers = [
     new LineLayer<Line>({
@@ -215,10 +212,13 @@ export default function MapFrame() {
       getPosition: (p) => [p.x, p.y],
       radiusUnits: 'pixels',
       radiusScale: radius,
-      getRadius: (p) => (lit.has(p.id) ? 1.6 : 1),
-      getFillColor: (p) => [...colours[p.family], lit.size === 0 || lit.has(p.id) ? 235 : 70],
+      getRadius: (p) => (!revealed ? 0 : lit.has(p.id) ? 1.6 : 1),
+      getFillColor: (p) => [...colours[p.family], lit.size === 0 || lit.has(p.id) ? 215 : 85],
       pickable: true,
-      updateTriggers: { getRadius: litKey, getFillColor: litKey },
+      updateTriggers: { getRadius: [litKey, revealed], getFillColor: litKey },
+      transitions: {
+        getRadius: reducedMotion() ? 0 : settled ? 180 : { duration: 1400, easing: (t: number) => 1 - (1 - t) ** 3 },
+      },
     }),
     new ScatterplotLayer<MapPoint>({
       id: 'ring',
@@ -235,14 +235,27 @@ export default function MapFrame() {
   ]
 
   const select = (id: number | null) => {
+    if (id != null && selected == null && view) setHome({ target: view.target, zoom: view.zoom })
+    if (id == null && home) {
+      setView({ ...home, transitionDuration: reducedMotion() ? 0 : 500, transitionInterpolator: FLY })
+      setHome(null)
+    }
     setSelected(id)
     setAttempt(0)
   }
+  const onEscape = useEffectEvent(() => select(null))
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onEscape()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
-  const flyTo = (x: number, y: number) => {
+  const flyTo = (x: number, y: number, zoomIn: boolean) => {
     if (!view) return
-    const zoom = Math.max(view.zoom, fit + 2)
-    const offset = wide ? (size.w * 0.15) / 2 ** zoom : 0
+    const zoom = zoomIn ? Math.max(view.zoom, fit + 2) : view.zoom
+    const offset = wide ? (size.w * (0.5 - COLUMN / 2)) / 2 ** zoom : 0
     setView({
       target: [x + offset, y],
       zoom,
@@ -256,7 +269,12 @@ export default function MapFrame() {
     if (!p) return
     if (hidden.has(p.family)) setHidden((h) => new Set([...h].filter((f) => f !== p.family)))
     select(id)
-    flyTo(p.x, p.y)
+    flyTo(p.x, p.y, true)
+  }
+
+  const onMapClick = (p: MapPoint | undefined) => {
+    select(p?.id ?? null)
+    if (p && wide && project(p.x, p.y)[0] > size.w * (COLUMN - 0.04)) flyTo(p.x, p.y, false)
   }
 
   const onPick = (r: SearchResult) => goTo(r.id)
@@ -268,16 +286,14 @@ export default function MapFrame() {
       return next
     })
 
-  let detailStyle: React.CSSProperties | undefined
-  if (wide && selPoint) {
-    const [sx, sy] = project(selPoint.x, selPoint.y)
-    const width = Math.min(420, size.w * 0.34)
-    const left = sx < size.w * 0.58 ? sx + 36 : sx - 36 - width
-    detailStyle = {
-      left: clamp(left, 24, size.w - width - 24),
-      top: clamp(sy - 48, 96, Math.max(96, size.h - detailHeight - 130)),
-      width,
-    }
+  const nearLabels: { n: Neighbour; x: number; y: number }[] = []
+  for (const n of near) {
+    const p = byId.get(n.id)
+    if (!p || hidden.has(p.family)) continue
+    const [x, py] = project(p.x, p.y)
+    let y = py
+    for (const o of nearLabels) if (Math.abs(o.x - x) < 240 && Math.abs(o.y - y) < 42) y = o.y + 42
+    nearLabels.push({ n, x, y })
   }
 
   const status = failed
@@ -290,8 +306,9 @@ export default function MapFrame() {
 
   return (
     <section id="map" className="map-frame" aria-label="The map">
-      <div ref={stageRef} className="map-stage">
+      <div ref={stageRef} className={['map-stage', split && 'split', revealed && 'revealed'].filter(Boolean).join(' ')}>
         {view && (
+          <div className="map-canvas">
           <DeckGL
             views={VIEW}
             viewState={{ ...view, minZoom: fit - 0.5, maxZoom: fit + 5 }}
@@ -305,10 +322,12 @@ export default function MapFrame() {
             touchAction={inView ? 'none' : 'pan-y'}
             layers={layers}
             pickingRadius={6}
+            useDevicePixels={Math.min(2, window.devicePixelRatio || 1)}
             onHover={(info: PickingInfo<MapPoint>) => setHovered(info.object?.id ?? null)}
-            onClick={(info: PickingInfo<MapPoint>) => select(info.object?.id ?? null)}
+            onClick={(info: PickingInfo<MapPoint>) => onMapClick(info.object)}
             getCursor={({ isDragging, isHovering }) => (isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab')}
           />
+          </div>
         )}
 
         <div className="map-labels" aria-hidden="true">
@@ -316,6 +335,7 @@ export default function MapFrame() {
             .filter((a) => !hidden.has(a.id))
             .map((a) => {
               const [x, y] = project(a.x, a.y)
+              if (y < 84 || y > size.h - 24) return null
               return (
                 <span key={a.id} className="family-label" style={{ transform: `translate(${x}px, ${y}px) translate(-50%, -50%)` }}>
                   {a.name}
@@ -327,17 +347,12 @@ export default function MapFrame() {
               {p.name}
             </span>
           ))}
-          {near.map((n) => {
-            const p = byId.get(n.id)
-            if (!p || hidden.has(p.family)) return null
-            const [x, y] = project(p.x, p.y)
-            return (
-              <span key={n.id} className="map-label near" style={{ transform: `translate(${x + 10}px, ${y - 10}px)` }}>
-                {n.name}
-                <span className="map-label-aside">{shares(n.sharedNotes)}</span>
-              </span>
-            )
-          })}
+          {nearLabels.map(({ n, x, y }) => (
+            <span key={n.id} className="map-label near" style={{ transform: `translate(${x + 10}px, ${y - 10}px)` }}>
+              {n.name}
+              <span className="map-label-aside">{shares(n.sharedNotes)}</span>
+            </span>
+          ))}
           {hovPoint && hovered !== selected && (
             <span
               className="map-label hover"
@@ -351,7 +366,7 @@ export default function MapFrame() {
 
         <header>
           <a href="#" className="wordmark">
-            scentmap
+            Aldehyde
           </a>
           <Search onPick={onPick} />
         </header>
@@ -371,8 +386,8 @@ export default function MapFrame() {
       </div>
 
       {current && (
-        <div ref={detailRef} className="detail-place" style={detailStyle}>
-          <Detail detail={current} onSelect={goTo} onRetry={() => setAttempt((a) => a + 1)} onClose={() => select(null)} />
+        <div ref={detailRef} className="detail-place">
+          <Detail key={current === 'failed' ? 'failed' : current.id} detail={current} onSelect={goTo} onRetry={() => setAttempt((a) => a + 1)} onClose={() => select(null)} />
         </div>
       )}
 

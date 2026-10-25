@@ -15,7 +15,7 @@ static class PerfumeEndpoints
     static async Task<List<MapPoint>> GetAll(PerfumeCache cache, HttpContext ctx)
     {
         ctx.Response.Headers.CacheControl = "public, max-age=300";
-        return (await cache.AllAsync()).Select(p => new MapPoint(p.Id, p.Name, p.House, p.Family, p.X, p.Y)).ToList();
+        return (await cache.AllAsync()).Select(p => new MapPoint(p.Id, p.Name, p.House, p.Family, Math.Round(p.X, 1), Math.Round(p.Y, 1))).ToList();
     }
 
     static async Task<IResult> GetDetail(int id, AppDbContext db)
@@ -37,20 +37,28 @@ static class PerfumeEndpoints
 
     static async Task<IResult> Search(string? q, PerfumeCache cache)
     {
-        if (string.IsNullOrWhiteSpace(q)) return Results.BadRequest();
-        var term = q.Trim();
-        var all = await cache.AllAsync();
-        var hits = all.Select(p => (Perfume: p, Rank: Rank(p, term))).Where(h => h.Rank >= 0)
-            .OrderBy(h => h.Rank).ThenBy(h => h.Perfume.Name).Take(20)
-            .Select(h => new SearchResult(h.Perfume.Id, h.Perfume.Name, h.Perfume.House, h.Perfume.X, h.Perfume.Y)).ToList();
+        var phrase = PerfumeCache.Fold(q ?? "");
+        if (phrase.Length == 0) return Results.BadRequest();
+        var terms = phrase.Split(' ');
+        var index = await cache.IndexAsync();
+        var hits = index.Select(e => (Entry: e, Rank: Rank(e, phrase, terms))).Where(h => h.Rank >= 0)
+            .OrderBy(h => h.Rank).ThenBy(h => h.Entry.Perfume.Id).Take(30)
+            .Select(h => new SearchResult(h.Entry.Perfume.Id, h.Entry.Perfume.Name, h.Entry.Perfume.House, h.Entry.Perfume.X, h.Entry.Perfume.Y)).ToList();
         return Results.Ok(hits);
     }
 
-    static int Rank(Perfume p, string term) =>
-        p.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ? 0
-        : p.House.Contains(term, StringComparison.OrdinalIgnoreCase) ? 1
-        : p.AllNotes.Any(n => n.Contains(term, StringComparison.OrdinalIgnoreCase)) ? 2
+    static int Rank(SearchEntry e, string phrase, string[] terms) =>
+        e.Name == phrase ? 0
+        : HasWord(e.Name, phrase, whole: true) ? 1
+        : terms.All(t => HasWord(e.NameAndHouse, t, whole: true)) ? 2
+        : HasWord(e.Name, phrase, whole: false) ? 3
+        : terms.All(t => HasWord(e.NameAndHouse, t, whole: false)) ? 4
+        : terms.All(t => HasWord(e.Everything, t, whole: true)) ? 5
+        : terms.All(t => HasWord(e.Everything, t, whole: false)) ? 6
         : -1;
+
+    static bool HasWord(string text, string word, bool whole) =>
+        $" {text}{(whole ? " " : "")}".Contains($" {word}{(whole ? " " : "")}", StringComparison.Ordinal);
 
     internal static IQueryable<Perfume> WithoutEmbedding(AppDbContext db) =>
         db.Perfumes.AsNoTracking().Select(p => new Perfume

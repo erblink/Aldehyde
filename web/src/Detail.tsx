@@ -19,6 +19,19 @@ function notesSentence({ top, heart, base }: PerfumeDetail['notes']) {
   return `${s[0].toUpperCase()}${s.slice(1)}.`
 }
 
+function facts(d: PerfumeDetail): [string, string][] {
+  const { top, heart, base } = d.notes
+  const tiers: [string, string[]][] =
+    heart.length || base.length ? [['Top', top], ['Heart', heart], ['Base', base]] : [['Notes', top]]
+  const rows: [string, string][] = [
+    ['Concentration', d.strength ?? ''],
+    [d.perfumers.length > 1 ? 'Perfumers' : 'Perfumer', list(d.perfumers)],
+    ...tiers.map(([label, notes]): [string, string] => [label, list(notes.map(note))]),
+    ['Accords', list(d.accords.slice(0, 6))],
+  ]
+  return rows.filter(([, value]) => value).map(([label, value]) => [label, value[0].toUpperCase() + value.slice(1)])
+}
+
 const sourceText = (d: Dupe) =>
   d.source === 'house'
     ? 'Named by the house'
@@ -47,8 +60,6 @@ export default function Detail({ detail, onSelect, onRetry, onClose }: Props) {
   const meta = [
     detail.house,
     detail.year,
-    detail.strength,
-    detail.perfumers.length ? `by ${list(detail.perfumers)}` : null,
   ]
     .filter(Boolean)
     .join(', ')
@@ -60,6 +71,14 @@ export default function Detail({ detail, onSelect, onRetry, onClose }: Props) {
       </h2>
       <p className="detail-meta">{meta}</p>
       <p className="detail-notes">{notesSentence(detail.notes)}</p>
+      <dl className="detail-facts">
+        {facts(detail).map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
 
       {detail.neighbours.length > 0 && (
         <section className="detail-part">

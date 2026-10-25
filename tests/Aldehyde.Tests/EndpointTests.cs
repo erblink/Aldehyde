@@ -42,6 +42,25 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
         Assert.True(doc.RootElement.GetArrayLength() >= 1);
     }
 
+    [Theory]
+    [InlineData("BÉRGAMOT")]
+    [InlineData("h orig")]
+    [InlineData("ORÍG")]
+    public async Task SearchFoldsAccentsAndMatchesAcrossFields(string q)
+    {
+        var json = await client.GetStringAsync($"/api/search?q={Uri.EscapeDataString(q)}");
+        using var doc = JsonDocument.Parse(json);
+        Assert.Contains(doc.RootElement.EnumerateArray(), r => r.GetProperty("name").GetString() == "Orig");
+    }
+
+    [Fact]
+    public async Task SearchMatchesWordStartsOnly()
+    {
+        var json = await client.GetStringAsync("/api/search?q=rig");
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(0, doc.RootElement.GetArrayLength());
+    }
+
     [Fact]
     public async Task DetailOrdersDupesHouseCommunitySuggested()
     {
