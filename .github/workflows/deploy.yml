@@ -73,5 +73,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4" # the action's default 3.x predates wrangler.jsonc
           workingDirectory: web
           command: deploy
