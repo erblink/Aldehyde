@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aldehyde.Data;
 
-// Seed file: [{"dupeName":"...","dupeHouse":"...","originalName":"...","originalHouse":"...","source":"house","votes":0}]
 public class DupeImporter(AppDbContext db)
 {
     static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };

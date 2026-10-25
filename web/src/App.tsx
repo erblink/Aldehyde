@@ -42,7 +42,6 @@ function Opening() {
   )
 }
 
-// A plain key until the map exists; it becomes a filter in Phase B.
 function FamilyKey() {
   return (
     <ul className="family-key" aria-label="Scent families">
@@ -59,7 +58,6 @@ function FamilyKey() {
 function MapFrame() {
   return (
     <section id="map" className="map-frame" aria-label="The map">
-      {/* deck.gl mounts here once GET /api/perfumes exists. */}
       <div className="map-canvas" />
       <header>
         <div className="wordmark">scentmap</div>

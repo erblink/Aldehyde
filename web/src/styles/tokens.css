@@ -1,10 +1,9 @@
 :root {
   --midnight: #151936;
   --bone: #e8e2d6;
-  --dusk: #9ca3bc; /* about 6.7:1 on midnight */
+  --dusk: #9ca3bc;
   --hairline: rgba(232, 226, 214, 0.16);
 
-  /* Scent families. Colour is reserved for these. */
   --fam-citrus: #d8c27a;
   --fam-green: #8fa67f;
   --fam-aquatic: #7fa8b0;

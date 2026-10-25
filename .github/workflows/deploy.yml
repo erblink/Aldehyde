@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
 env:
   IMAGE: ghcr.io/erblink/aldehyde-api
 
@@ -32,8 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # push to GHCR
-      id-token: write # OIDC login to Azure
+      packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -73,6 +77,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4" # the action's default 3.x predates wrangler.jsonc
+          wranglerVersion: "4"
           workingDirectory: web
           command: deploy

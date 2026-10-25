@@ -2,7 +2,6 @@ using Aldehyde.Data;
 
 namespace Aldehyde.Api;
 
-// Data commands: dotnet run --project src/Aldehyde.Api -- <command>
 static class Cli
 {
     const string Usage = "Usage: import <dataset.json|jsonl|csv> [limit] | import-dupes <dupes.json> | embed | coords";
@@ -26,7 +25,6 @@ static class Cli
                 _ => Usage,
             };
         }
-        // dotnet run uses the project folder as working directory, so relative paths resolve there.
         catch (FileNotFoundException e)
         {
             return $"File not found: {e.FileName}. Use an absolute path.";

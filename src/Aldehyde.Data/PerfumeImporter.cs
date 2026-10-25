@@ -4,8 +4,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aldehyde.Data;
 
-// Swappable dataset importer. Input: JSON array, JSONL, or CSV with columns
-// name, house, year, strength, perfumers, accords, top, heart, base, ratings.
 public class PerfumeImporter(AppDbContext db)
 {
     static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
@@ -19,22 +17,25 @@ public class PerfumeImporter(AppDbContext db)
         var existing = await db.Perfumes.ToDictionaryAsync(p => Key(p.Name, p.House));
         var unmapped = new Dictionary<string, int>();
         var fallbacks = 0;
+        var seen = new HashSet<string>();
+        var imported = 0;
         foreach (var r in selected)
         {
+            var key = Key(r.Name, r.House ?? "");
+            if (!seen.Add(key)) continue;
+            imported++;
             var accords = r.Accords ?? [];
             foreach (var a in accords.Take(5))
                 if (!FamilyClassifier.IsMapped(a))
                     unmapped[a.Trim().ToLowerInvariant()] = unmapped.GetValueOrDefault(a.Trim().ToLowerInvariant()) + 1;
             if (accords.Take(5).All(a => !FamilyClassifier.IsMapped(a))) fallbacks++;
 
-            var key = Key(r.Name, r.House ?? "");
             if (!existing.TryGetValue(key, out var p))
             {
                 p = new Perfume();
                 db.Perfumes.Add(p);
                 existing[key] = p;
             }
-            // Upsert: re-import updates facts but keeps embedding and position, unless the embedded text changed.
             var embeddedText = Embedder.BuildText(p);
             p.Name = r.Name.Trim(); p.House = (r.House ?? "").Trim();
             p.Year = r.Year; p.Strength = r.Strength; p.Ratings = r.RatingsValue;
@@ -48,10 +49,9 @@ public class PerfumeImporter(AppDbContext db)
         await db.SaveChangesAsync();
         var counts = db.Perfumes.GroupBy(p => p.Family).Select(g => $"{g.Key}:{g.Count()}");
         var topUnmapped = unmapped.OrderByDescending(kv => kv.Value).Take(20).Select(kv => $"{kv.Key}:{kv.Value}");
-        return $"Imported {selected.Count} of {rows.Count}. Families: {string.Join(", ", counts)}. Fallbacks: {fallbacks}. Unmapped: {string.Join(", ", topUnmapped)}";
+        return $"Imported {imported} of {rows.Count} ({selected.Count - imported} repeats skipped). Families: {string.Join(", ", counts)}. Fallbacks: {fallbacks}. Unmapped: {string.Join(", ", topUnmapped)}";
     }
 
-    // Perfume identity: the same name exists at several houses.
     internal static string Key(string name, string house) => $"{name.Trim().ToLowerInvariant()}|{house.Trim().ToLowerInvariant()}";
 
     async Task<List<RawPerfume>> ReadRowsAsync(string path)
@@ -77,15 +77,31 @@ public class PerfumeImporter(AppDbContext db)
             var i = head.FindIndex(h => names.Contains(h));
             return i >= 0 && i < row.Count && !string.IsNullOrWhiteSpace(row[i]) ? row[i].Trim() : null;
         }
-        static List<string>? List(string? v) => v is null ? null :
-            v.Split([';', '|', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-        return rows.Skip(1).Select(r => new RawPerfume(
-            Get(r, "name") ?? "", Get(r, "house", "brand"), int.TryParse(Get(r, "year"), out var y) ? y : null,
-            Get(r, "strength"), List(Get(r, "perfumers", "perfumer")), List(Get(r, "accords")),
-            new RawNotes(List(Get(r, "top", "top notes", "topnotes")), List(Get(r, "heart", "heart notes", "middle", "middle notes")), List(Get(r, "base", "base notes"))),
-            null, null, null,
-            int.TryParse(Get(r, "ratings", "ratingcount", "numratings", "reviews")?.Replace(",", ""), out var n) ? n : null,
-            null, null)).ToList();
+        static List<string>? List(string? v, bool weighted = false)
+        {
+            if (v is null) return null;
+            var items = v.Split([';', '|', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return weighted ? items.Select(StripWeight).ToList() : items.ToList();
+        }
+        static string StripWeight(string s)
+        {
+            var i = s.LastIndexOf(':');
+            return i > 0 && int.TryParse(s[(i + 1)..], out _) ? s[..i].Trim() : s;
+        }
+        return rows.Skip(1).Select(r =>
+        {
+            var top = List(Get(r, "notes_top", "top", "top notes", "topnotes"), weighted: true);
+            var heart = List(Get(r, "notes_middle", "heart", "heart notes", "middle", "middle notes"), weighted: true);
+            var baseNotes = List(Get(r, "notes_base", "base", "base notes"), weighted: true);
+            top ??= List(Get(r, "notes_flat"), weighted: true);
+            return new RawPerfume(
+                Get(r, "name") ?? "", Get(r, "house", "brand"), int.TryParse(Get(r, "year"), out var y) ? y : null,
+                Get(r, "strength"), List(Get(r, "perfumers", "perfumer")), List(Get(r, "accords"), weighted: true),
+                new RawNotes(top, heart, baseNotes),
+                null, null, null,
+                int.TryParse(Get(r, "ratings", "ratingcount", "numratings", "reviews", "vote_count", "votecount")?.Replace(",", ""), out var n) ? n : null,
+                null, null);
+        }).ToList();
     }
 }
 

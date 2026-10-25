@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Family } from './api/types'
 
-// One translucent disc per scent family. Position in fractions of the opening frame,
-// size in fractions of its shorter side, depth scales the pointer parallax.
 const DROPS: { id: Family; name: string; x: number; y: number; d: number; depth: number }[] = [
   { id: 'citrus', name: 'Citrus', x: 0.6, y: 0.27, d: 0.3, depth: 0.6 },
   { id: 'green', name: 'Green', x: 0.72, y: 0.17, d: 0.22, depth: 1 },
@@ -12,8 +10,8 @@ const DROPS: { id: Family; name: string; x: number; y: number; d: number; depth:
   { id: 'amber', name: 'Amber', x: 0.78, y: 0.69, d: 0.24, depth: 0.5 },
 ]
 
-const PARALLAX = 18 // px at depth 1
-const KEY_STEP = 24 // px per arrow key, x3 with Shift
+const PARALLAX = 18
+const KEY_STEP = 24
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -41,7 +39,7 @@ export default function Drops() {
       const h = opening.offsetHeight
       const narrow = w < 760
       const p = reduced.matches ? 0 : clamp(window.scrollY / h, 0, 1)
-      const t = p * p * (3 - 2 * p) // smoothstep
+      const t = p * p * (3 - 2 * p)
 
       pointer.x = lerp(pointer.x, pointer.tx, 0.12)
       pointer.y = lerp(pointer.y, pointer.ty, 0.12)
@@ -53,14 +51,12 @@ export default function Drops() {
         const size = drop.d * Math.min(w, h) * (narrow ? 1.3 : 1)
         el.style.width = el.style.height = `${size}px`
 
-        // Narrow screens: spread across the width, above the headline.
         const fx = narrow ? 0.15 + (drop.x - 0.6) * 2.4 : drop.x
         const fy = narrow ? 0.1 + drop.y * 0.55 : drop.y
         const par = reduced.matches ? 0 : PARALLAX * drop.depth
         const hx = fx * w + drag[i].x + pointer.x * par
         const hy = fy * h + drag[i].y + pointer.y * par
 
-        // Pull back: each disc lands on its swatch in the map's family key.
         let cx = hx, cy = hy, scale = 1
         const swatch = t > 0 ? document.querySelector(`.family-key [data-family="${drop.id}"] .swatch`) : null
         if (swatch) {

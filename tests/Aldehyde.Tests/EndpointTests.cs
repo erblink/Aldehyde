@@ -79,7 +79,6 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
         readonly string dbPath = Path.Combine(Path.GetTempPath(), $"aldehyde-api-{Guid.NewGuid()}.db");
         bool seeded;
 
-        // "Testing" skips user-secrets, and the empty Postgres string keeps tests off Neon.
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder) =>
             builder.UseEnvironment("Testing").ConfigureAppConfiguration((_, cfg) =>
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
@@ -114,7 +113,7 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
             base.Dispose(disposing);
             if (!disposing) return;
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-            try { File.Delete(dbPath); } catch (IOException) { /* temp file, OS cleans up */ }
+            try { File.Delete(dbPath); } catch (IOException) { }
         }
     }
 }

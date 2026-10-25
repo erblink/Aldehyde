@@ -18,9 +18,7 @@ public class Perfume
     public string Family { get; set; } = "woody";
     public double X { get; set; }
     public double Y { get; set; }
-    // Nearest perfumes by vector, closest first. Set by MapLayout so requests do no vector maths.
     public List<int> NeighbourIds { get; set; } = [];
-    // JSON array in SQLite; pgvector column when Neon lands.
     public string? EmbeddingJson { get; set; }
     public float[]? Embedding => EmbeddingJson is null ? null : JsonSerializer.Deserialize<float[]>(EmbeddingJson);
     public IEnumerable<string> AllNotes => TopNotes.Concat(HeartNotes).Concat(BaseNotes);
@@ -31,6 +29,6 @@ public class DupeLink
     public int Id { get; set; }
     public int DupeId { get; set; }
     public int OriginalId { get; set; }
-    public string Source { get; set; } = "suggested"; // house | community | suggested
+    public string Source { get; set; } = "suggested";
     public int Votes { get; set; }
 }

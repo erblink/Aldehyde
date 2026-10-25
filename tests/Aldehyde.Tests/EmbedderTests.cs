@@ -15,7 +15,6 @@ public class EmbedderTests : IDisposable
         return db;
     }
 
-    // First call returns one vector per text, every later call answers 429.
     sealed class FirstBatchThenQuota : HttpMessageHandler
     {
         public int Calls;
@@ -66,6 +65,6 @@ public class EmbedderTests : IDisposable
     public void Dispose()
     {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        try { File.Delete(dbPath); } catch (IOException) { /* temp file, OS cleans up */ }
+        try { File.Delete(dbPath); } catch (IOException) { }
     }
 }

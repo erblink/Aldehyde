@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull);
 builder.Services.AddResponseCompression();
-// Neon Postgres when ConnectionStrings:Postgres is set (user-secrets locally, Azure secret in production), else local SQLite.
 builder.Services.AddDbContext<AppDbContext>((sp, o) =>
 {
     var cfg = sp.GetRequiredService<IConfiguration>();
@@ -14,13 +13,14 @@ builder.Services.AddDbContext<AppDbContext>((sp, o) =>
     if (!string.IsNullOrEmpty(postgres)) o.UseNpgsql(postgres);
     else o.UseSqlite(cfg.GetConnectionString("Default") ?? "Data Source=aldehyde.db");
 });
+builder.Services.AddSingleton<PerfumeCache>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:5173"])
     .AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
-    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated(); // shortcut: no migrations; a schema change means dropping the tables and re-importing
+    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
 
 if (Cli.IsCommand(args))
 {

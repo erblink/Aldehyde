@@ -12,11 +12,10 @@ static class PerfumeEndpoints
         app.MapGet("/api/search", Search);
     }
 
-    static async Task<List<MapPoint>> GetAll(AppDbContext db, HttpContext ctx)
+    static async Task<List<MapPoint>> GetAll(PerfumeCache cache, HttpContext ctx)
     {
-        ctx.Response.Headers.CacheControl = "public, max-age=3600";
-        return await db.Perfumes.AsNoTracking()
-            .Select(p => new MapPoint(p.Id, p.Name, p.House, p.Family, p.X, p.Y)).ToListAsync();
+        ctx.Response.Headers.CacheControl = "public, max-age=300";
+        return (await cache.AllAsync()).Select(p => new MapPoint(p.Id, p.Name, p.House, p.Family, p.X, p.Y)).ToList();
     }
 
     static async Task<IResult> GetDetail(int id, AppDbContext db)
@@ -36,27 +35,24 @@ static class PerfumeEndpoints
             new Notes(p.TopNotes, p.HeartNotes, p.BaseNotes), p.Accords, p.Family, neighbours, dupes));
     }
 
-    static async Task<IResult> Search(string? q, AppDbContext db)
+    static async Task<IResult> Search(string? q, PerfumeCache cache)
     {
         if (string.IsNullOrWhiteSpace(q)) return Results.BadRequest();
         var term = q.Trim();
-        // shortcut: text match in memory over 5k rows; vector search when Neon + pgvector land.
-        var all = await WithoutEmbedding(db).ToListAsync();
+        var all = await cache.AllAsync();
         var hits = all.Select(p => (Perfume: p, Rank: Rank(p, term))).Where(h => h.Rank >= 0)
             .OrderBy(h => h.Rank).ThenBy(h => h.Perfume.Name).Take(20)
             .Select(h => new SearchResult(h.Perfume.Id, h.Perfume.Name, h.Perfume.House, h.Perfume.X, h.Perfume.Y)).ToList();
         return Results.Ok(hits);
     }
 
-    // Name matches first, then house, then notes. -1 = no match.
     static int Rank(Perfume p, string term) =>
         p.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ? 0
         : p.House.Contains(term, StringComparison.OrdinalIgnoreCase) ? 1
         : p.AllNotes.Any(n => n.Contains(term, StringComparison.OrdinalIgnoreCase)) ? 2
         : -1;
 
-    // Everything but the vector, which is ~10 KB of JSON per row and unused here.
-    static IQueryable<Perfume> WithoutEmbedding(AppDbContext db) =>
+    internal static IQueryable<Perfume> WithoutEmbedding(AppDbContext db) =>
         db.Perfumes.AsNoTracking().Select(p => new Perfume
         {
             Id = p.Id, Name = p.Name, House = p.House, Year = p.Year, Strength = p.Strength,

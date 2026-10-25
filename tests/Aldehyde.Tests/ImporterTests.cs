@@ -81,6 +81,16 @@ public class ImporterTests : IDisposable
     }
 
     [Fact]
+    public async Task RepeatedPerfumeKeepsHigherRatedRow()
+    {
+        var file = WriteFile("data.json",
+            """[{"name":"A","house":"H","ratings":1,"notes":{"top":["weak"]}},{"name":"A","house":"H","ratings":100,"notes":{"top":["strong"]}}]""");
+        using var db = NewDb();
+        await new PerfumeImporter(db).ImportAsync(file);
+        Assert.Equal(["strong"], (await db.Perfumes.SingleAsync()).TopNotes);
+    }
+
+    [Fact]
     public async Task CsvImportParsesNotes()
     {
         var file = WriteFile("data.csv",
@@ -90,6 +100,38 @@ public class ImporterTests : IDisposable
         var p = await db.Perfumes.SingleAsync();
         Assert.Equal(["bergamot", "pepper"], p.TopNotes);
         Assert.Equal("citrus", p.Family);
+    }
+
+    [Fact]
+    public async Task CsvImportParsesDecantColumns()
+    {
+        var file = WriteFile("data.csv",
+            "name,brand,year,vote_count,accords,notes_top,notes_middle,notes_base,notes_flat,perfumers\n" +
+            "A,Dior,2015,1234,\"citrus:100|fresh spicy:47\",\"Bergamot:49|Lemon:5\",Jasmine:80,\"Cedar:10\",,Some Perfumer\n" +
+            "B,Chanel,,77,woody:90,,,,\"Musk:44|Rose:9\",\n");
+        using var db = NewDb();
+        var result = await new PerfumeImporter(db).ImportAsync(file, limit: 1);
+        Assert.Contains("Imported 1", result);
+        var p = await db.Perfumes.SingleAsync();
+        Assert.Equal("Dior", p.House);
+        Assert.Equal(1234, p.Ratings);
+        Assert.Equal(["citrus", "fresh spicy"], p.Accords);
+        Assert.Equal(["Bergamot", "Lemon"], p.TopNotes);
+        Assert.Equal(["Jasmine"], p.HeartNotes);
+        Assert.Equal(["Cedar"], p.BaseNotes);
+        Assert.Equal("citrus", p.Family);
+    }
+
+    [Fact]
+    public async Task CsvImportUsesFlatNotesWhenNoPyramid()
+    {
+        var file = WriteFile("data.csv",
+            "name,brand,vote_count,accords,notes_top,notes_middle,notes_base,notes_flat\n" +
+            "B,Chanel,77,woody:90,,,,\"Musk:44|Rose:9\"\n");
+        using var db = NewDb();
+        await new PerfumeImporter(db).ImportAsync(file);
+        var p = await db.Perfumes.SingleAsync();
+        Assert.Equal(["Musk", "Rose"], p.TopNotes);
     }
 
     [Fact]
@@ -156,7 +198,6 @@ public class ImporterTests : IDisposable
     {
         using (var db = NewDb())
         {
-            // Same name at two houses must not crash the lookup.
             db.Perfumes.AddRange(
                 new Perfume { Name = "Orig", House = "H" },
                 new Perfume { Name = "Orig", House = "Other" },
@@ -177,6 +218,6 @@ public class ImporterTests : IDisposable
     {
         foreach (var f in files) File.Delete(f);
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        try { File.Delete(dbPath); } catch (IOException) { /* temp file, OS cleans up */ }
+        try { File.Delete(dbPath); } catch (IOException) { }
     }
 }

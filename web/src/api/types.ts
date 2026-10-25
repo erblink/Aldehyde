@@ -1,9 +1,5 @@
-// Response shapes the frontend expects from /api. src/Aldehyde.Api/Contracts.cs must match;
-// change both sides together.
-
 export type Family = 'citrus' | 'green' | 'aquatic' | 'floral' | 'woody' | 'amber'
 
-// GET /api/perfumes: every point on the map. x and y are precomputed at import time.
 export interface MapPoint {
   id: number
   name: string
@@ -29,7 +25,6 @@ export interface Dupe {
   sharedNotes: string[]
 }
 
-// GET /api/perfumes/{id}. Optional fields may be missing from the dataset.
 export interface PerfumeDetail {
   id: number
   name: string
@@ -44,7 +39,6 @@ export interface PerfumeDetail {
   dupes: Dupe[]
 }
 
-// GET /api/search?q=
 export interface SearchResult {
   id: number
   name: string

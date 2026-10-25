@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aldehyde.Data;
 
-// Runs once every perfume has a vector: places each point (x, y in 0–1000) and stores its nearest neighbours.
 public class MapLayout(AppDbContext db)
 {
     public const int NeighbourCount = 5;
@@ -27,7 +26,6 @@ public class MapLayout(AppDbContext db)
         return $"Coordinates set for {all.Count}.";
     }
 
-    // UMAP (UMAP-Sharp, pure C#): cosine distance on unit vectors, 15 neighbours or fewer on tiny sets.
     static (double[] Xs, double[] Ys) Umap2(float[][] vecs)
     {
         var umap = new UMAP.Umap(random: new SeededRandom(42), numberOfNeighbors: Math.Min(15, vecs.Length - 1));
@@ -37,7 +35,6 @@ public class MapLayout(AppDbContext db)
         return (embedding.Select(p => (double)p[0]).ToArray(), embedding.Select(p => (double)p[1]).ToArray());
     }
 
-    // Brute force over unit vectors, so dot product = cosine similarity. 5k perfumes take seconds.
     static int[][] Nearest(float[][] unit, int k)
     {
         var result = new int[unit.Length][];
@@ -73,7 +70,6 @@ public class MapLayout(AppDbContext db)
     static double Dot(double[] a, double[] b) { double s = 0; for (var i = 0; i < a.Length; i++) s += a[i] * b[i]; return s; }
     static double Dot(float[] a, float[] b) { double s = 0; for (var i = 0; i < a.Length; i++) s += a[i] * b[i]; return s; }
 
-    // UMAP-Sharp has no seed option. A fixed seed, single-threaded, keeps points in place between runs.
     sealed class SeededRandom(int seed) : UMAP.IProvideRandomValues
     {
         readonly Random rnd = new(seed);
