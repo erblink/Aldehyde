@@ -14,6 +14,7 @@ builder.Services.AddDbContext<AppDbContext>((sp, o) =>
     else o.UseSqlite(cfg.GetConnectionString("Default") ?? "Data Source=aldehyde.db");
 });
 builder.Services.AddSingleton<PerfumeCache>();
+builder.Services.AddHttpClient<IQueryEmbedder, CloudflareQueryEmbedder>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:5173"])
     .AllowAnyHeader().AllowAnyMethod()));

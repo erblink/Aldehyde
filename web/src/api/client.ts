@@ -1,4 +1,4 @@
-import type { MapPoint, PerfumeDetail, SearchResult } from './types'
+import type { MapPoint, PerfumeDetail, SearchResult, Suggestion } from './types'
 
 const base = import.meta.env.VITE_API_URL ?? ''
 
@@ -38,6 +38,16 @@ export const api = {
   },
   search: (q: string, signal?: AbortSignal) =>
     get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`, signal),
+  suggest: async (text: string, signal?: AbortSignal): Promise<Suggestion[]> => {
+    const res = await fetch(`${base}/api/suggest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+      signal,
+    })
+    if (!res.ok) throw new Error(`${res.status} /api/suggest`)
+    return res.json() as Promise<Suggestion[]>
+  },
   warm: () => {
     fetch(`${base}/api/perfumes/0`).catch(() => {})
   },

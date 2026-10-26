@@ -8,3 +8,5 @@ public record PerfumeDetail(int Id, string Name, string House, int? Year, string
     List<string> Perfumers, Notes Notes, List<string> Accords, string Family,
     List<Neighbour> Neighbours, List<Dupe> Dupes);
 public record SearchResult(int Id, string Name, string House, double X, double Y);
+public record SuggestRequest(string? Text);
+public record Suggestion(int Id, string Name, string House, string Family, double X, double Y, List<string> Accords);

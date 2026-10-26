@@ -469,6 +469,135 @@ a:hover {
   display: none;
 }
 
+.map-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: min(340px, 100%);
+}
+
+.map-tools .search {
+  width: 100%;
+}
+
+.suggest {
+  position: relative;
+}
+
+.suggest-row {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+}
+
+.suggest input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  background: transparent;
+  color: var(--bone);
+  font: inherit;
+  font-size: 14px;
+}
+
+.suggest input::placeholder {
+  color: var(--dusk);
+}
+
+.suggest input:focus {
+  outline: none;
+  border-bottom-color: var(--bone);
+}
+
+.suggest-row button {
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--bone);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.suggest-row button:disabled {
+  color: var(--dusk);
+  cursor: default;
+}
+
+.suggest-note {
+  position: absolute;
+  top: calc(100% + 10px);
+  margin: 0;
+  font-size: 13px;
+  color: var(--dusk);
+}
+
+.suggest-note:empty {
+  display: none;
+}
+
+.suggest-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  padding: 6px 0 10px;
+  background: var(--midnight);
+  border-bottom: 1px solid var(--hairline);
+  z-index: 3;
+  animation: up-in 220ms ease-out;
+}
+
+.suggest-heading {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--dusk);
+}
+
+.suggest-main,
+.suggest-alt {
+  display: block;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.suggest-name {
+  display: block;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--dusk);
+}
+
+.suggest-name.main {
+  font-size: 24px;
+  line-height: 1.15;
+  color: var(--bone);
+}
+
+.suggest-main:hover .suggest-name,
+.suggest-alt:hover .suggest-name {
+  color: var(--bone);
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+  text-underline-offset: 4px;
+}
+
+.suggest-aside {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dusk);
+}
+
 .family-key {
   position: absolute;
   left: var(--gutter);

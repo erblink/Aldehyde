@@ -10,6 +10,7 @@ static class PerfumeEndpoints
         app.MapGet("/api/perfumes", GetAll);
         app.MapGet("/api/perfumes/{id:int}", GetDetail);
         app.MapGet("/api/search", Search);
+        app.MapPost("/api/suggest", Suggest);
     }
 
     static async Task<List<MapPoint>> GetAll(PerfumeCache cache, HttpContext ctx)
@@ -45,6 +46,16 @@ static class PerfumeEndpoints
             .OrderBy(h => h.Rank).ThenBy(h => h.Entry.Perfume.Id).Take(30)
             .Select(h => new SearchResult(h.Entry.Perfume.Id, h.Entry.Perfume.Name, h.Entry.Perfume.House, h.Entry.Perfume.X, h.Entry.Perfume.Y)).ToList();
         return Results.Ok(hits);
+    }
+
+    static async Task<IResult> Suggest(SuggestRequest? req, PerfumeCache cache, IQueryEmbedder embedder, CancellationToken ct)
+    {
+        var text = req?.Text?.Trim() ?? "";
+        if (text.Length is < 3 or > 500) return Results.BadRequest();
+        var query = await embedder.EmbedAsync(text, ct);
+        if (query is null || query.Length == 0) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        var top = SuggestionRanker.Top(query, await cache.VectorsAsync(), 3);
+        return Results.Ok(top.Select(p => new Suggestion(p.Id, p.Name, p.House, p.Family, p.X, p.Y, p.Accords.Take(5).ToList())).ToList());
     }
 
     static int Rank(SearchEntry e, string phrase, string[] terms) =>

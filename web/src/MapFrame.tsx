@@ -7,6 +7,7 @@ import type { Family, MapPoint, Neighbour, PerfumeDetail, SearchResult } from '.
 import Detail from './Detail'
 import { FAMILIES, familyColours, type RGB } from './families'
 import Search from './Search'
+import Suggest from './Suggest'
 import { shares } from './text'
 
 type View = {
@@ -368,7 +369,10 @@ export default function MapFrame() {
           <a href="#" className="wordmark">
             Aldehyde
           </a>
-          <Search onPick={onPick} />
+          <div className="map-tools">
+            <Search onPick={onPick} />
+            <Suggest onPick={goTo} />
+          </div>
         </header>
 
         {status && <p className="map-empty">{status}</p>}

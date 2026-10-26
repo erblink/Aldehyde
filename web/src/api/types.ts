@@ -46,3 +46,13 @@ export interface SearchResult {
   x: number
   y: number
 }
+
+export interface Suggestion {
+  id: number
+  name: string
+  house: string
+  family: Family
+  x: number
+  y: number
+  accords: string[]
+}
