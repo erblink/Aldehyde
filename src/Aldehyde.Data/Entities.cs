@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Aldehyde.Data;
 
 public class Perfume
@@ -20,7 +18,6 @@ public class Perfume
     public double Y { get; set; }
     public List<int> NeighbourIds { get; set; } = [];
     public string? EmbeddingJson { get; set; }
-    public float[]? Embedding => EmbeddingJson is null ? null : JsonSerializer.Deserialize<float[]>(EmbeddingJson);
     public IEnumerable<string> AllNotes => TopNotes.Concat(HeartNotes).Concat(BaseNotes);
 }
 

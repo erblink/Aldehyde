@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using Aldehyde.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,41 +41,78 @@ static class PerfumeEndpoints
     {
         var phrase = PerfumeCache.Fold(q ?? "");
         if (phrase.Length == 0) return Results.BadRequest();
-        var terms = phrase.Split(' ');
+        var whole = $" {phrase} ";
+        var start = $" {phrase}";
+        var wholeTerms = phrase.Split(' ').Select(t => $" {t} ").ToArray();
+        var startTerms = phrase.Split(' ').Select(t => $" {t}").ToArray();
         var index = await cache.IndexAsync();
-        var hits = index.Select(e => (Entry: e, Rank: Rank(e, phrase, terms))).Where(h => h.Rank >= 0)
-            .OrderBy(h => h.Rank).ThenBy(h => h.Entry.Perfume.Id).Take(30)
-            .Select(h => new SearchResult(h.Entry.Perfume.Id, h.Entry.Perfume.Name, h.Entry.Perfume.House, h.Entry.Perfume.X, h.Entry.Perfume.Y)).ToList();
+        var hits = index.Select(e => (Entry: e, Rank: Rank(e, whole, start, wholeTerms, startTerms))).Where(h => h.Rank >= 0)
+            .OrderBy(h => h.Rank).Take(30)
+            .Select(h => new SearchResult(h.Entry.Perfume.Id, h.Entry.Perfume.Name, h.Entry.Perfume.House)).ToList();
         return Results.Ok(hits);
     }
 
-    static async Task<IResult> Suggest(SuggestRequest? req, PerfumeCache cache, IQueryEmbedder embedder, CancellationToken ct)
+    static async Task<IResult> Suggest(SuggestRequest? req, PerfumeCache cache, IQueryEmbedder embedder,
+        Turnstile turnstile, RateLimiter limiter, CancellationToken ct)
     {
         var text = req?.Text?.Trim() ?? "";
         if (text.Length is < 3 or > 500) return Results.BadRequest();
-        var query = await embedder.EmbedAsync(text, ct);
-        if (query is null || query.Length == 0) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-        var top = SuggestionRanker.Top(query, await cache.VectorsAsync(), 3);
-        return Results.Ok(top.Select(p => new Suggestion(p.Id, p.Name, p.House, p.Family, p.X, p.Y, p.Accords.Take(5).ToList())).ToList());
+        if (!await turnstile.PassesAsync(req?.Token, ct)) return Results.StatusCode(StatusCodes.Status403Forbidden);
+        var vectors = await cache.VectorsAsync();
+        var named = NamedIn(text, await cache.IndexAsync());
+        var besides = named is null ? null : vectors.FirstOrDefault(v => v.Perfume.Id == named.Perfume.Id);
+        var query = besides?.Unit;
+        if (query is null)
+        {
+            using var lease = limiter.AttemptAcquire();
+            if (!lease.IsAcquired) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            query = await embedder.EmbedAsync(text, ct);
+            if (query is null || query.Length == 0) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        var top = SuggestionRanker.Top(query, vectors, 3, besides);
+        return Results.Ok(top.Select(p => new Suggestion(p.Id, p.Name, p.House, p.Accords.Take(5).ToList())).ToList());
     }
 
-    static int Rank(SearchEntry e, string phrase, string[] terms) =>
-        e.Name == phrase ? 0
-        : HasWord(e.Name, phrase, whole: true) ? 1
-        : terms.All(t => HasWord(e.NameAndHouse, t, whole: true)) ? 2
-        : HasWord(e.Name, phrase, whole: false) ? 3
-        : terms.All(t => HasWord(e.NameAndHouse, t, whole: false)) ? 4
-        : terms.All(t => HasWord(e.Everything, t, whole: true)) ? 5
-        : terms.All(t => HasWord(e.Everything, t, whole: false)) ? 6
+    static readonly HashSet<string> Filler =
+        ["something", "anything", "like", "similar", "to", "smells", "smelling", "a", "an", "the",
+         "perfume", "fragrance", "scent", "but", "cheaper", "dupe", "alternative", "of"];
+
+    static SearchEntry? NamedIn(string text, List<SearchEntry> index)
+    {
+        var folded = PerfumeCache.Fold(text);
+        foreach (var phrase in new[] { folded, string.Join(' ', folded.Split(' ').Where(w => !Filler.Contains(w))) })
+        {
+            if (phrase.Length == 0) continue;
+            var whole = $" {phrase} ";
+            var words = phrase.Split(' ').Select(w => $" {w} ").ToArray();
+            var hit = index.FirstOrDefault(e => e.Name == whole)
+                ?? index.FirstOrDefault(e => e.NameAndHouse.Length == whole.Length && HasAll(e.NameAndHouse, words));
+            if (hit is not null) return hit;
+        }
+        return null;
+    }
+
+    static int Rank(SearchEntry e, string whole, string start, string[] wholeTerms, string[] startTerms) =>
+        e.Name == whole ? 0
+        : e.Name.Contains(whole, StringComparison.Ordinal) ? 1
+        : HasAll(e.NameAndHouse, wholeTerms) ? 2
+        : e.Name.Contains(start, StringComparison.Ordinal) ? 3
+        : HasAll(e.NameAndHouse, startTerms) ? 4
+        : HasAll(e.Everything, wholeTerms) ? 5
+        : HasAll(e.Everything, startTerms) ? 6
         : -1;
 
-    static bool HasWord(string text, string word, bool whole) =>
-        $" {text}{(whole ? " " : "")}".Contains($" {word}{(whole ? " " : "")}", StringComparison.Ordinal);
+    static bool HasAll(string text, string[] words)
+    {
+        foreach (var w in words)
+            if (!text.Contains(w, StringComparison.Ordinal)) return false;
+        return true;
+    }
 
     internal static IQueryable<Perfume> WithoutEmbedding(AppDbContext db) =>
         db.Perfumes.AsNoTracking().Select(p => new Perfume
         {
-            Id = p.Id, Name = p.Name, House = p.House, Year = p.Year, Strength = p.Strength,
+            Id = p.Id, Name = p.Name, House = p.House, Year = p.Year, Strength = p.Strength, Ratings = p.Ratings,
             Perfumers = p.Perfumers, TopNotes = p.TopNotes, HeartNotes = p.HeartNotes, BaseNotes = p.BaseNotes,
             Accords = p.Accords, Family = p.Family, X = p.X, Y = p.Y, NeighbourIds = p.NeighbourIds,
         });

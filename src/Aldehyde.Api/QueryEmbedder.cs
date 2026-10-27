@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using Aldehyde.Data;
 
@@ -11,47 +10,54 @@ public interface IQueryEmbedder
 
 public sealed class CloudflareQueryEmbedder(IConfiguration cfg, HttpClient http) : IQueryEmbedder
 {
+    public const string Instruction = "Given a description of a mood, place or moment, retrieve perfumes whose notes and accords evoke it";
+
     public async Task<float[]?> EmbedAsync(string text, CancellationToken ct = default)
     {
         var account = cfg["WorkersAi:AccountId"];
         var token = cfg["WorkersAi:ApiToken"];
-        if (string.IsNullOrEmpty(account) || string.IsNullOrEmpty(token)) return null;
-        var model = cfg["WorkersAi:Model"] ?? "@cf/qwen/qwen3-embedding-0.6b";
-        using var req = new HttpRequestMessage(HttpMethod.Post,
-            $"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}");
-        req.Headers.Authorization = new("Bearer", token);
-        req.Content = JsonContent.Create(new { text = new[] { text } });
-        using var res = await http.SendAsync(req, ct);
-        if (!res.IsSuccessStatusCode) return null;
-        using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
-        return JsonSerializer.Deserialize<float[]>(doc.RootElement.GetProperty("result").GetProperty("data")[0].GetRawText());
+        var model = cfg["WorkersAi:Model"];
+        if (string.IsNullOrEmpty(account) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(model)) return null;
+        try
+        {
+            var input = new { queries = new[] { text }, instruction = Instruction };
+            return (await Embedder.RunAsync(http, account, token, model, input, ct)).Vectors?.FirstOrDefault();
+        }
+        catch (Exception e) when (e is HttpRequestException or JsonException or KeyNotFoundException or InvalidOperationException
+            || e is TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return null;
+        }
     }
 }
 
 public static class SuggestionRanker
 {
-    public static List<Perfume> Top(float[] query, IReadOnlyList<VectorEntry> entries, int count)
+    public const double SameScent = 0.99;
+
+    public static List<Perfume> Top(float[] query, IReadOnlyList<VectorEntry> entries, int count, VectorEntry? besides = null)
     {
-        var q = Normalise(query);
-        var best = new List<(double Score, Perfume Perfume)>(count + 1);
+        var q = MapLayout.Normalise(query);
+        var pool = count * 4;
+        var best = new List<(double Score, VectorEntry Entry)>(pool + 1);
         foreach (var e in entries)
         {
             if (e.Unit.Length != q.Length) continue;
-            double s = 0;
-            for (var i = 0; i < q.Length; i++) s += q[i] * e.Unit[i];
+            var s = MapLayout.Dot(q, e.Unit);
             var at = best.FindIndex(b => s > b.Score);
-            if (at < 0 && best.Count == count) continue;
-            best.Insert(at < 0 ? best.Count : at, (s, e.Perfume));
-            if (best.Count > count) best.RemoveAt(count);
+            if (at < 0 && best.Count == pool) continue;
+            best.Insert(at < 0 ? best.Count : at, (s, e));
+            if (best.Count > pool) best.RemoveAt(pool);
         }
-        return best.Select(b => b.Perfume).ToList();
-    }
-
-    internal static float[] Normalise(float[] v)
-    {
-        double norm = 0;
-        foreach (var x in v) norm += x * x;
-        norm = Math.Sqrt(norm);
-        return norm == 0 ? v : v.Select(x => (float)(x / norm)).ToArray();
+        List<VectorEntry> seen = besides is null ? [] : [besides];
+        var top = new List<Perfume>(count);
+        foreach (var (_, e) in best)
+        {
+            if (top.Count == count) break;
+            if (seen.Any(p => MapLayout.Dot(p.Unit, e.Unit) >= SameScent)) continue;
+            seen.Add(e);
+            top.Add(e.Perfume);
+        }
+        return top;
     }
 }

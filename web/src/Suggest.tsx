@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from './api/client'
 import type { Suggestion } from './api/types'
 import { list } from './text'
+import { loadTurnstile, SITE_KEY } from './turnstile'
 
 type State = 'idle' | 'pending' | 'done' | 'empty' | 'unavailable' | 'failed'
 
@@ -9,17 +10,51 @@ export default function Suggest({ onPick }: { onPick: (id: number) => void }) {
   const [q, setQ] = useState('')
   const [state, setState] = useState<State>('idle')
   const [picks, setPicks] = useState<Suggestion[]>([])
+  const [token, setToken] = useState<string | null>(null)
+  const [blocked, setBlocked] = useState(false)
   const ctrl = useRef<AbortController | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const widget = useRef<string | null>(null)
+
+  useEffect(() => {
+    let live = true
+    loadTurnstile().then(
+      () => {
+        if (!live || !box.current) return
+        widget.current = window.turnstile.render(box.current, {
+          sitekey: SITE_KEY,
+          appearance: 'interaction-only',
+          callback: (t) => {
+            setToken(t)
+            setBlocked(false)
+          },
+          'expired-callback': () => setToken(null),
+          'error-callback': () => {
+            setToken(null)
+            setBlocked(true)
+          },
+        })
+      },
+      () => live && setBlocked(true),
+    )
+    return () => {
+      live = false
+      if (widget.current) window.turnstile.remove(widget.current)
+      widget.current = null
+    }
+  }, [])
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const text = q.trim()
-    if (text.length < 3) return
+    if (text.length < 3 || !token) return
     ctrl.current?.abort()
     const c = new AbortController()
     ctrl.current = c
     setState('pending')
-    api.suggest(text, c.signal).then(
+    setToken(null)
+    if (widget.current) window.turnstile.reset(widget.current)
+    api.suggest(text, token, c.signal).then(
       (r) => {
         setPicks(r)
         setState(r.length ? 'done' : 'empty')
@@ -54,16 +89,17 @@ export default function Suggest({ onPick }: { onPick: (id: number) => void }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <button type="submit" disabled={state === 'pending' || q.trim().length < 3}>
+          <button type="submit" disabled={state === 'pending' || !token || q.trim().length < 3}>
             Suggest
           </button>
         </div>
+        <div ref={box} className="suggest-check" />
       </form>
 
       <p className="suggest-note" role="status">
         {state === 'pending'
           ? 'Looking for something close to that.'
-          : state === 'unavailable'
+          : blocked || state === 'unavailable'
             ? "Suggestions aren't available right now."
             : state === 'failed'
               ? "Suggestions didn't respond. Try again."

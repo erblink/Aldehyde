@@ -24,6 +24,7 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
         var json = await client.GetStringAsync("/api/perfumes");
         using var doc = JsonDocument.Parse(json);
         Assert.Equal(4, doc.RootElement.GetArrayLength());
+        Assert.Equal("SuggDupe", doc.RootElement[0].GetProperty("name").GetString());
     }
 
     [Fact]
@@ -115,7 +116,7 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
             var orig = new Perfume { Name = "Orig", House = "H", TopNotes = ["bergamot"] };
             var house = new Perfume { Name = "HouseDupe", House = "C", TopNotes = ["bergamot"] };
             var comm = new Perfume { Name = "CommDupe", House = "C" };
-            var sugg = new Perfume { Name = "SuggDupe", House = "C" };
+            var sugg = new Perfume { Name = "SuggDupe", House = "C", Ratings = 10 };
             db.Perfumes.AddRange(orig, house, comm, sugg);
             db.SaveChanges();
             orig.NeighbourIds = [house.Id, comm.Id];

@@ -25,7 +25,7 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
     [Fact]
     public async Task SuggestReturnsClosestFirst()
     {
-        var res = await client.PostAsJsonAsync("/api/suggest", new { text = "rainy day in a library, reading philosophy" });
+        var res = await client.PostAsJsonAsync("/api/suggest", new { text = "rainy day in a library, reading philosophy", token = "t" });
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
         var hits = doc.RootElement.EnumerateArray().ToList();
@@ -38,6 +38,58 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
     public async Task SuggestRejectsShortText() =>
         Assert.Equal(HttpStatusCode.BadRequest,
             (await client.PostAsJsonAsync("/api/suggest", new { text = "hi" })).StatusCode);
+
+    [Fact]
+    public async Task TokenlessSuggestIsRejectedWithoutUsingTheRateLimit()
+    {
+        using var own = new Factory();
+        own.Seed();
+        var c = own.CreateClient();
+        for (var i = 0; i < 40; i++)
+            Assert.Equal(HttpStatusCode.Forbidden, (await c.PostAsJsonAsync("/api/suggest", new { text = "rain" })).StatusCode);
+        var codes = new List<HttpStatusCode>();
+        for (var i = 0; i < 31; i++)
+            codes.Add((await c.PostAsJsonAsync("/api/suggest", new { text = "rain", token = "t" })).StatusCode);
+        Assert.All(codes[..30], s => Assert.Equal(HttpStatusCode.OK, s));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, codes[30]);
+    }
+
+    sealed class Reply(HttpStatusCode code, string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(new HttpResponseMessage(code) { Content = new StringContent(body) });
+    }
+
+    [Theory]
+    [InlineData("secret", "t", HttpStatusCode.OK, """{"success":true}""", true)]
+    [InlineData("secret", "t", HttpStatusCode.OK, """{"success":false,"error-codes":["invalid-input-response"]}""", false)]
+    [InlineData("secret", "t", HttpStatusCode.OK, "not json", false)]
+    [InlineData("secret", "t", HttpStatusCode.InternalServerError, "", false)]
+    [InlineData("secret", "", HttpStatusCode.OK, """{"success":true}""", false)]
+    [InlineData("", "t", HttpStatusCode.OK, """{"success":true}""", false)]
+    public async Task TurnstilePassesOnlyOnSuccess(string secret, string token, HttpStatusCode code, string body, bool passes)
+    {
+        var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Turnstile:SecretKey"] = secret,
+        }).Build();
+        Assert.Equal(passes, await new Turnstile(cfg, new HttpClient(new Reply(code, body))).PassesAsync(token));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, """{"result":{"data":[[0.5,0.25]]}}""", 2)]
+    [InlineData(HttpStatusCode.OK, """{"errors":[]}""", 0)]
+    [InlineData(HttpStatusCode.OK, "not json", 0)]
+    [InlineData(HttpStatusCode.InternalServerError, "", 0)]
+    public async Task QueryEmbedderReadsVectorOrReturnsNull(HttpStatusCode code, string body, int length)
+    {
+        var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["WorkersAi:AccountId"] = "a", ["WorkersAi:ApiToken"] = "t", ["WorkersAi:Model"] = "m",
+        }).Build();
+        var vector = await new CloudflareQueryEmbedder(cfg, new HttpClient(new Reply(code, body))).EmbedAsync("rain");
+        Assert.Equal(length, vector?.Length ?? 0);
+    }
 
     [Fact]
     public async Task VectorsDropEmbeddingJson()
@@ -82,6 +134,54 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
         Assert.Equal(2, top[0].Id);
     }
 
+    [Fact]
+    public void RankShowsOneOfIdenticalScents()
+    {
+        var entries = new List<VectorEntry>
+        {
+            new(new Perfume { Id = 1, Name = "EDT" }, [1f, 0f]),
+            new(new Perfume { Id = 2, Name = "EDP" }, [1f, 0f]),
+            new(new Perfume { Id = 3, Name = "Other" }, [0.8f, 0.6f]),
+        };
+        Assert.Equal([1, 3], SuggestionRanker.Top([1f, 0f], entries, 2).Select(p => p.Id));
+    }
+
+    [Theory]
+    [InlineData("something like Farthest")]
+    [InlineData("farthest H")]
+    [InlineData("H Farthest")]
+    public async Task NamedPerfumeIsTheQueryAndLeftOut(string text)
+    {
+        var res = await client.PostAsJsonAsync("/api/suggest", new { text, token = "t" });
+        using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+        Assert.Equal(["Second", "Closest"], doc.RootElement.EnumerateArray().Select(h => h.GetProperty("name").GetString()));
+    }
+
+    sealed class Capture : HttpMessageHandler
+    {
+        public string? Body;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Body = await request.Content!.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"result":{"data":[[1,0]]}}""") };
+        }
+    }
+
+    [Fact]
+    public async Task QueryEmbedderSendsAQueryWithInstruction()
+    {
+        var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["WorkersAi:AccountId"] = "a", ["WorkersAi:ApiToken"] = "t", ["WorkersAi:Model"] = "m",
+        }).Build();
+        var capture = new Capture();
+        await new CloudflareQueryEmbedder(cfg, new HttpClient(capture)).EmbedAsync("rain");
+        using var doc = JsonDocument.Parse(capture.Body!);
+        Assert.Equal("rain", doc.RootElement.GetProperty("queries")[0].GetString());
+        Assert.Equal(CloudflareQueryEmbedder.Instruction, doc.RootElement.GetProperty("instruction").GetString());
+        Assert.False(doc.RootElement.TryGetProperty("text", out _));
+    }
+
     public sealed class Factory : WebApplicationFactory<Program>
     {
         readonly string dbPath = Path.Combine(Path.GetTempPath(), $"aldehyde-suggest-{Guid.NewGuid()}.db");
@@ -100,8 +200,13 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
                     {
                         ["ConnectionStrings:Default"] = $"Data Source={dbPath}",
                         ["ConnectionStrings:Postgres"] = "",
+                        ["Turnstile:SecretKey"] = "secret",
                     }))
-                .ConfigureTestServices(s => s.AddSingleton<IQueryEmbedder, FakeEmbedder>());
+                .ConfigureTestServices(s =>
+                {
+                    s.AddSingleton<IQueryEmbedder, FakeEmbedder>();
+                    s.AddHttpClient<Turnstile>().ConfigurePrimaryHttpMessageHandler(() => new Reply(HttpStatusCode.OK, """{"success":true}"""));
+                });
 
         public void Seed()
         {

@@ -77,7 +77,7 @@ public class MapLayout(AppDbContext db, string? cachePath = null)
         return result;
     }
 
-    static float[] Normalise(float[] v)
+    public static float[] Normalise(float[] v)
     {
         var norm = Math.Sqrt(Dot(v, v));
         return norm == 0 ? v : v.Select(x => (float)(x / norm)).ToArray();
@@ -89,8 +89,7 @@ public class MapLayout(AppDbContext db, string? cachePath = null)
         return v.Select(x => max == min ? 500 : (x - min) / (max - min) * 1000).ToArray();
     }
 
-    static double Dot(double[] a, double[] b) { double s = 0; for (var i = 0; i < a.Length; i++) s += a[i] * b[i]; return s; }
-    static double Dot(float[] a, float[] b) { double s = 0; for (var i = 0; i < a.Length; i++) s += a[i] * b[i]; return s; }
+    public static double Dot(float[] a, float[] b) { double s = 0; for (var i = 0; i < a.Length; i++) s += a[i] * b[i]; return s; }
 
     sealed class SeededRandom(int seed) : UMAP.IProvideRandomValues
     {

@@ -540,6 +540,13 @@ a:hover {
   display: none;
 }
 
+.suggest-check {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 2;
+}
+
 .suggest-results {
   position: absolute;
   top: calc(100% + 6px);

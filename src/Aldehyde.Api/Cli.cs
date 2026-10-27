@@ -35,9 +35,9 @@ static class Cli
     {
         var account = cfg["WorkersAi:AccountId"];
         var token = cfg["WorkersAi:ApiToken"];
-        if (account is null || token is null) return "Set WorkersAi:AccountId and WorkersAi:ApiToken via user-secrets first.";
+        var model = cfg["WorkersAi:Model"];
+        if (account is null || token is null || model is null) return "Set WorkersAi:AccountId and WorkersAi:ApiToken via user-secrets, and WorkersAi:Model in appsettings.json, first.";
         using var http = new HttpClient();
-        return await new Embedder(db).EmbedPendingAsync(http, account, token,
-            cfg["WorkersAi:Model"] ?? "@cf/qwen/qwen3-embedding-0.6b", cfg.GetValue("WorkersAi:NeuronCap", 8000));
+        return await new Embedder(db).EmbedPendingAsync(http, account, token, model, cfg.GetValue<int>("WorkersAi:NeuronCap"));
     }
 }

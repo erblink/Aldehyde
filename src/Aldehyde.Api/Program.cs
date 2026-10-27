@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Aldehyde.Api;
 using Aldehyde.Data;
+using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +15,8 @@ builder.Services.AddDbContext<AppDbContext>((sp, o) =>
     else o.UseSqlite(cfg.GetConnectionString("Default") ?? "Data Source=aldehyde.db");
 });
 builder.Services.AddSingleton<PerfumeCache>();
+builder.Services.AddSingleton<RateLimiter>(new FixedWindowRateLimiter(new() { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
+builder.Services.AddHttpClient<Turnstile>();
 builder.Services.AddHttpClient<IQueryEmbedder, CloudflareQueryEmbedder>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:5173"])

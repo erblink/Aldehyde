@@ -15,21 +15,33 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
     List<Perfume>? all;
     List<SearchEntry>? index;
     List<VectorEntry>? vectors;
+    readonly SemaphoreSlim gate = new(1, 1);
 
-    public async Task<List<Perfume>> AllAsync()
+    public async Task<List<Perfume>> AllAsync() => all ?? await Locked(async () => all ??= await LoadAllAsync());
+
+    public async Task<List<SearchEntry>> IndexAsync() =>
+        index ?? await Locked(async () => index ??= BuildIndex(all ??= await LoadAllAsync()));
+
+    public async Task<List<VectorEntry>> VectorsAsync() => vectors ?? await Locked(async () => vectors ??= await LoadVectorsAsync());
+
+    async Task<T> Locked<T>(Func<Task<T>> load)
     {
-        if (all is not null) return all;
-        using var scope = scopes.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        return all = await PerfumeEndpoints.WithoutEmbedding(db).OrderBy(p => p.Id).ToListAsync();
+        await gate.WaitAsync();
+        try { return await load(); }
+        finally { gate.Release(); }
     }
 
-    public async Task<List<VectorEntry>> VectorsAsync()
+    async Task<List<Perfume>> LoadAllAsync()
     {
-        if (vectors is not null) return vectors;
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        // Raw reader, one row at a time: EF buffers the whole result and OOMs the small container.
+        return await PerfumeEndpoints.WithoutEmbedding(db).OrderByDescending(p => p.Ratings).ThenBy(p => p.Id).ToListAsync();
+    }
+
+    async Task<List<VectorEntry>> LoadVectorsAsync()
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var list = new List<VectorEntry>();
         var conn = db.Database.GetDbConnection();
         await conn.OpenAsync();
@@ -54,19 +66,20 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
                     Id = id, Name = name, House = house, Family = family, X = x, Y = y,
                     Accords = accordsJson is null ? [] : JsonSerializer.Deserialize<List<string>>(accordsJson) ?? [],
                 };
-                list.Add(new VectorEntry(p, SuggestionRanker.Normalise(embedding)));
+                list.Add(new VectorEntry(p, MapLayout.Normalise(embedding)));
             }
         }
         finally { await conn.CloseAsync(); }
-        return vectors = list;
+        return list;
     }
 
-    public async Task<List<SearchEntry>> IndexAsync() =>
-        index ??= (await AllAsync()).Select(p =>
+    static List<SearchEntry> BuildIndex(List<Perfume> perfumes) =>
+        perfumes.Select(p =>
         {
             var name = Fold(p.Name);
             var nameAndHouse = $"{name} {Fold(p.House)}";
-            return new SearchEntry(p, name, nameAndHouse, $"{nameAndHouse} {Fold(string.Join(' ', p.AllNotes.Concat(p.Accords)))}");
+            return new SearchEntry(p, $" {name} ", $" {nameAndHouse} ",
+                $" {nameAndHouse} {Fold(string.Join(' ', p.AllNotes.Concat(p.Accords)))} ");
         }).ToList();
 
     public static string Fold(string s)

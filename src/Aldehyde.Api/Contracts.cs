@@ -7,6 +7,6 @@ public record Notes(List<string> Top, List<string> Heart, List<string> Base);
 public record PerfumeDetail(int Id, string Name, string House, int? Year, string? Strength,
     List<string> Perfumers, Notes Notes, List<string> Accords, string Family,
     List<Neighbour> Neighbours, List<Dupe> Dupes);
-public record SearchResult(int Id, string Name, string House, double X, double Y);
-public record SuggestRequest(string? Text);
-public record Suggestion(int Id, string Name, string House, string Family, double X, double Y, List<string> Accords);
+public record SearchResult(int Id, string Name, string House);
+public record SuggestRequest(string? Text, string? Token);
+public record Suggestion(int Id, string Name, string House, List<string> Accords);

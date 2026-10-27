@@ -43,7 +43,7 @@ public class EmbedderTests : IDisposable
         var handler = new FirstBatchThenQuota();
         string result;
         using (var db = NewDb())
-            result = await new Embedder(db).EmbedPendingAsync(new HttpClient(handler), "acc", "tok", "model");
+            result = await new Embedder(db).EmbedPendingAsync(new HttpClient(handler), "acc", "tok", "model", neuronCap: 8000);
 
         Assert.StartsWith("Quota hit. Done 100, missing 50", result);
         using var check = NewDb();

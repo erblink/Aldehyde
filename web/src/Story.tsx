@@ -19,8 +19,7 @@ export default function Story() {
       .then((ps) => {
         if (!live || !ps.length) return
         setPoints(ps)
-        const first = ps.reduce((a, b) => (b.id < a.id ? b : a))
-        return api.detail(first.id).then((d) => {
+        return api.detail(ps[0].id).then((d) => {
           if (live) setFeatured(d)
         })
       })

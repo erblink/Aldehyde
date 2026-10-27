@@ -43,16 +43,11 @@ export interface SearchResult {
   id: number
   name: string
   house: string
-  x: number
-  y: number
 }
 
 export interface Suggestion {
   id: number
   name: string
   house: string
-  family: Family
-  x: number
-  y: number
   accords: string[]
 }

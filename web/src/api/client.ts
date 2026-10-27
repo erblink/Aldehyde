@@ -38,11 +38,11 @@ export const api = {
   },
   search: (q: string, signal?: AbortSignal) =>
     get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`, signal),
-  suggest: async (text: string, signal?: AbortSignal): Promise<Suggestion[]> => {
+  suggest: async (text: string, token: string, signal?: AbortSignal): Promise<Suggestion[]> => {
     const res = await fetch(`${base}/api/suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, token }),
       signal,
     })
     if (!res.ok) throw new Error(`${res.status} /api/suggest`)

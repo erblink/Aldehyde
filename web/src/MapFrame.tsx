@@ -134,7 +134,6 @@ export default function MapFrame() {
 
   const byId = useMemo(() => new Map((points ?? []).map((p) => [p.id, p])), [points])
   const visible = useMemo(() => (points ?? []).filter((p) => !hidden.has(p.family)), [points, hidden])
-  const byRank = useMemo(() => [...visible].sort((a, b) => a.id - b.id), [visible])
   const anchors = useMemo(() => familyAnchors(points ?? []), [points])
 
   const selPoint = selected != null ? byId.get(selected) : undefined
@@ -163,7 +162,7 @@ export default function MapFrame() {
     const scale = 2 ** view.zoom
     const taken: number[][] = []
     const out: { p: MapPoint; x: number; y: number }[] = []
-    for (const p of byRank) {
+    for (const p of visible) {
       if (reserved.has(p.id)) continue
       const x = (p.x - view.target[0]) * scale + size.w / 2
       const y = (p.y - view.target[1]) * scale + size.h / 2
@@ -175,7 +174,7 @@ export default function MapFrame() {
       if (out.length >= max) break
     }
     return out
-  }, [view, size, fit, byRank, reserved, edge])
+  }, [view, size, fit, visible, reserved, edge])
 
   const lines = useMemo(() => {
     const out: Line[] = []
