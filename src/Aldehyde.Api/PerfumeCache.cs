@@ -1,5 +1,7 @@
+using System.Data;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using Aldehyde.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,20 +29,35 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
         if (vectors is not null) return vectors;
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var query = db.Perfumes.AsNoTracking().Where(p => p.EmbeddingJson != null)
-            .Select(p => new Perfume
-            {
-                Id = p.Id, Name = p.Name, House = p.House, Family = p.Family, X = p.X, Y = p.Y,
-                Accords = p.Accords, EmbeddingJson = p.EmbeddingJson,
-            });
-        // Stream rows: buffering every embedding string at once OOMs the small container.
+        // Raw reader, one row at a time: EF buffers the whole result and OOMs the small container.
         var list = new List<VectorEntry>();
-        await foreach (var p in query.AsAsyncEnumerable())
+        var conn = db.Database.GetDbConnection();
+        await conn.OpenAsync();
+        try
         {
-            var embedding = p.Embedding;
-            p.EmbeddingJson = null;
-            if (embedding is { Length: > 0 }) list.Add(new VectorEntry(p, SuggestionRanker.Normalise(embedding)));
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """SELECT "Id", "Name", "House", "Family", "X", "Y", "Accords", "EmbeddingJson" FROM "Perfumes" WHERE "EmbeddingJson" IS NOT NULL""";
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+            while (await reader.ReadAsync())
+            {
+                var id = reader.GetInt32(0);
+                var name = reader.GetString(1);
+                var house = reader.GetString(2);
+                var family = reader.GetString(3);
+                var x = reader.GetDouble(4);
+                var y = reader.GetDouble(5);
+                var accordsJson = reader.IsDBNull(6) ? null : reader.GetString(6);
+                var embedding = JsonSerializer.Deserialize<float[]>(reader.GetString(7));
+                if (embedding is not { Length: > 0 }) continue;
+                var p = new Perfume
+                {
+                    Id = id, Name = name, House = house, Family = family, X = x, Y = y,
+                    Accords = accordsJson is null ? [] : JsonSerializer.Deserialize<List<string>>(accordsJson) ?? [],
+                };
+                list.Add(new VectorEntry(p, SuggestionRanker.Normalise(embedding)));
+            }
         }
+        finally { await conn.CloseAsync(); }
         return vectors = list;
     }
 
