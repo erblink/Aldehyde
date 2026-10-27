@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 public class SuggestTests : IClassFixture<SuggestTests.Factory>
@@ -37,6 +38,35 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
     public async Task SuggestRejectsShortText() =>
         Assert.Equal(HttpStatusCode.BadRequest,
             (await client.PostAsJsonAsync("/api/suggest", new { text = "hi" })).StatusCode);
+
+    [Fact]
+    public async Task VectorsDropEmbeddingJson()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"aldehyde-vectors-{Guid.NewGuid()}.db");
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddDbContext<AppDbContext>(o => o.UseSqlite($"Data Source={dbPath}"));
+            using var provider = services.BuildServiceProvider();
+            using (var scope = provider.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Database.EnsureCreated();
+                db.Perfumes.Add(new Perfume { Name = "A", House = "H", EmbeddingJson = "[3,4]" });
+                db.SaveChanges();
+            }
+            var cache = new PerfumeCache(provider.GetRequiredService<IServiceScopeFactory>());
+            var vectors = await cache.VectorsAsync();
+            Assert.Single(vectors);
+            Assert.Null(vectors[0].Perfume.EmbeddingJson);
+            Assert.True(Math.Abs(vectors[0].Unit[0] - 0.6f) < 0.001);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try { File.Delete(dbPath); } catch (IOException) { }
+        }
+    }
 
     [Fact]
     public void RankSkipsMismatchedDimensions()

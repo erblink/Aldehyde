@@ -27,15 +27,21 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
         if (vectors is not null) return vectors;
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var rows = await db.Perfumes.AsNoTracking().Where(p => p.EmbeddingJson != null)
+        var query = db.Perfumes.AsNoTracking().Where(p => p.EmbeddingJson != null)
             .Select(p => new Perfume
             {
                 Id = p.Id, Name = p.Name, House = p.House, Family = p.Family, X = p.X, Y = p.Y,
                 Accords = p.Accords, EmbeddingJson = p.EmbeddingJson,
-            }).ToListAsync();
-        return vectors = rows
-            .Select(p => new VectorEntry(p, SuggestionRanker.Normalise(p.Embedding!)))
-            .Where(e => e.Unit.Length > 0).ToList();
+            });
+        // Stream rows: buffering every embedding string at once OOMs the small container.
+        var list = new List<VectorEntry>();
+        await foreach (var p in query.AsAsyncEnumerable())
+        {
+            var embedding = p.Embedding;
+            p.EmbeddingJson = null;
+            if (embedding is { Length: > 0 }) list.Add(new VectorEntry(p, SuggestionRanker.Normalise(embedding)));
+        }
+        return vectors = list;
     }
 
     public async Task<List<SearchEntry>> IndexAsync() =>
