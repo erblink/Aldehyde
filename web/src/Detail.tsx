@@ -36,7 +36,9 @@ const sourceText = (d: Dupe) =>
   d.source === 'house'
     ? 'Named by the house'
     : d.source === 'community'
-      ? `Confirmed by ${d.votes} ${d.votes === 1 ? 'person' : 'people'}`
+      ? d.votes > 0
+        ? `Confirmed by ${d.votes} ${d.votes === 1 ? 'person' : 'people'}`
+        : 'A community favourite'
       : 'Similar notes, unconfirmed'
 
 export default function Detail({ detail, onSelect, onRetry, onClose }: Props) {

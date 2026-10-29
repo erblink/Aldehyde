@@ -471,17 +471,54 @@ a:hover {
 
 .map-tools {
   display: flex;
-  flex-direction: column;
-  gap: 18px;
-  width: min(340px, 100%);
+  align-items: baseline;
+  gap: 20px;
+  width: min(460px, 100%);
 }
 
 .map-tools .search {
-  width: 100%;
+  flex: 1;
+}
+
+/* While the mood field is open it takes the search field's place. */
+.map-tools:has(.suggest-panel:not([hidden])) .search {
+  display: none;
+}
+
+.map-tools:has(.suggest-panel:not([hidden])) .suggest {
+  flex: 1;
 }
 
 .suggest {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+}
+
+.suggest-toggle {
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--dusk);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.suggest-toggle:hover {
+  color: var(--bone);
+}
+
+.suggest-panel {
   position: relative;
+  flex: 1;
+  min-width: 0;
+  animation: fade-in 220ms ease-out;
+}
+
+.suggest-panel[hidden] {
+  display: none;
 }
 
 .suggest-row {
