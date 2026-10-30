@@ -35,7 +35,9 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        return await PerfumeEndpoints.WithoutEmbedding(db).OrderByDescending(p => p.Ratings).ThenBy(p => p.Id).ToListAsync();
+        // Sort here: Ratings has no index, so ordering by it in SQL makes the small DB sort every row.
+        var perfumes = await PerfumeEndpoints.WithoutEmbedding(db).OrderBy(p => p.Id).ToListAsync();
+        return perfumes.OrderByDescending(p => p.Ratings).ToList();
     }
 
     async Task<List<VectorEntry>> LoadVectorsAsync()
