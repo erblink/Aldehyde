@@ -118,8 +118,8 @@ a:hover {
 .word {
   display: inline-block;
   overflow: hidden;
-  padding-bottom: 0.06em;
-  margin-bottom: -0.06em;
+  padding-bottom: 0.16em;
+  margin-bottom: -0.16em;
   vertical-align: top;
 }
 
@@ -176,7 +176,7 @@ a:hover {
 }
 
 @keyframes rise {
-  from { transform: translateY(105%); }
+  from { transform: translateY(125%); }
 }
 
 @keyframes fade-in {

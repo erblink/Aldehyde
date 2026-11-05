@@ -1,13 +1,10 @@
 using System.Data;
-using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Aldehyde.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aldehyde.Api;
 
-public record SearchEntry(Perfume Perfume, string Name, string NameAndHouse, string Everything);
 public record VectorEntry(Perfume Perfume, float[] Unit);
 
 public sealed class PerfumeCache(IServiceScopeFactory scopes)
@@ -15,12 +12,19 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
     List<Perfume>? all;
     List<SearchEntry>? index;
     List<VectorEntry>? vectors;
+    Dictionary<int, Perfume>? byId;
+    ILookup<int, DupeLink>? dupes;
     readonly SemaphoreSlim gate = new(1, 1);
 
     public async Task<List<Perfume>> AllAsync() => all ?? await Locked(async () => all ??= await LoadAllAsync());
 
     public async Task<List<SearchEntry>> IndexAsync() =>
-        index ?? await Locked(async () => index ??= BuildIndex(all ??= await LoadAllAsync()));
+        index ?? await Locked(async () => index ??= PerfumeSearch.BuildIndex(all ??= await LoadAllAsync()));
+
+    public async Task<Dictionary<int, Perfume>> ByIdAsync() =>
+        byId ?? await Locked(async () => byId ??= (all ??= await LoadAllAsync()).ToDictionary(p => p.Id));
+
+    public async Task<ILookup<int, DupeLink>> DupesAsync() => dupes ?? await Locked(async () => dupes ??= await LoadDupesAsync());
 
     public async Task<List<VectorEntry>> VectorsAsync() => vectors ?? await Locked(async () => vectors ??= await LoadVectorsAsync());
 
@@ -36,8 +40,15 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         // Sort here: Ratings has no index, so ordering by it in SQL makes the small DB sort every row.
-        var perfumes = await PerfumeEndpoints.WithoutEmbedding(db).OrderBy(p => p.Id).ToListAsync();
+        var perfumes = await WithoutEmbedding(db).OrderBy(p => p.Id).ToListAsync();
         return perfumes.OrderByDescending(p => p.Ratings).ToList();
+    }
+
+    async Task<ILookup<int, DupeLink>> LoadDupesAsync()
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return (await db.DupeLinks.AsNoTracking().ToListAsync()).ToLookup(d => d.OriginalId);
     }
 
     async Task<List<VectorEntry>> LoadVectorsAsync()
@@ -75,23 +86,11 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
         return list;
     }
 
-    static List<SearchEntry> BuildIndex(List<Perfume> perfumes) =>
-        perfumes.Select(p =>
+    static IQueryable<Perfume> WithoutEmbedding(AppDbContext db) =>
+        db.Perfumes.AsNoTracking().Select(p => new Perfume
         {
-            var name = Fold(p.Name);
-            var nameAndHouse = $"{name} {Fold(p.House)}";
-            return new SearchEntry(p, $" {name} ", $" {nameAndHouse} ",
-                $" {nameAndHouse} {Fold(string.Join(' ', p.AllNotes.Concat(p.Accords)))} ");
-        }).ToList();
-
-    public static string Fold(string s)
-    {
-        var sb = new StringBuilder(s.Length);
-        foreach (var c in s.Normalize(NormalizationForm.FormD))
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark || c is '\'' or '’') continue;
-            sb.Append(char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : ' ');
-        }
-        return string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-    }
+            Id = p.Id, Name = p.Name, House = p.House, Year = p.Year, Strength = p.Strength, Ratings = p.Ratings,
+            Perfumers = p.Perfumers, TopNotes = p.TopNotes, HeartNotes = p.HeartNotes, BaseNotes = p.BaseNotes,
+            Accords = p.Accords, Family = p.Family, X = p.X, Y = p.Y, NeighbourIds = p.NeighbourIds,
+        });
 }
