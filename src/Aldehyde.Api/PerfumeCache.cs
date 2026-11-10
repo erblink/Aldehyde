@@ -61,7 +61,7 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
         try
         {
             await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """SELECT "Id", "Name", "House", "Family", "X", "Y", "Accords", "EmbeddingJson" FROM "Perfumes" WHERE "EmbeddingJson" IS NOT NULL""";
+            cmd.CommandText = """SELECT "Id", "Name", "House", "Family", "X", "Y", "Accords", "Embedding" FROM "Perfumes" WHERE "Embedding" IS NOT NULL""";
             await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
             while (await reader.ReadAsync())
             {
@@ -72,8 +72,8 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
                 var x = reader.GetDouble(4);
                 var y = reader.GetDouble(5);
                 var accordsJson = reader.IsDBNull(6) ? null : reader.GetString(6);
-                var embedding = JsonSerializer.Deserialize<float[]>(reader.GetString(7));
-                if (embedding is not { Length: > 0 }) continue;
+                var embedding = Embedder.Unpack(reader.GetFieldValue<byte[]>(7));
+                if (embedding.Length == 0) continue;
                 var p = new Perfume
                 {
                     Id = id, Name = name, House = house, Family = family, X = x, Y = y,

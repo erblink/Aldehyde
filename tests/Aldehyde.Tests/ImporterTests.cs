@@ -41,22 +41,22 @@ public class ImporterTests : IDisposable
         using (var db = NewDb())
         {
             await new PerfumeImporter(db).ImportAsync(v1);
-            foreach (var p in db.Perfumes) p.EmbeddingJson = "[1,0]";
+            foreach (var p in db.Perfumes) p.Embedding = Embedder.Pack([1, 0]);
             await db.SaveChangesAsync();
         }
         using (var db = NewDb()) await new PerfumeImporter(db).ImportAsync(v2);
         using var check = NewDb();
-        Assert.Null(check.Perfumes.Single(p => p.Name == "A").EmbeddingJson);
-        Assert.Equal("[1,0]", check.Perfumes.Single(p => p.Name == "B").EmbeddingJson);
+        Assert.Null(check.Perfumes.Single(p => p.Name == "A").Embedding);
+        Assert.Equal(Embedder.Pack([1, 0]), check.Perfumes.Single(p => p.Name == "B").Embedding);
     }
 
     [Fact]
     public async Task LayoutIsTheSameOnEveryRun()
     {
         var rnd = new Random(3);
-        var embs = Enumerable.Range(0, 60).Select(_ => $"[{string.Join(",", Enumerable.Range(0, 8).Select(_ => rnd.NextDouble().ToString("F3", System.Globalization.CultureInfo.InvariantCulture)))}]").ToList();
+        var embs = Enumerable.Range(0, 60).Select(_ => Enumerable.Range(0, 8).Select(_ => (float)rnd.NextDouble()).ToArray()).ToList();
         using var db = NewDb();
-        for (var i = 0; i < embs.Count; i++) db.Perfumes.Add(new Perfume { Name = $"P{i}", House = "H", EmbeddingJson = embs[i] });
+        for (var i = 0; i < embs.Count; i++) db.Perfumes.Add(new Perfume { Name = $"P{i}", House = "H", Embedding = Embedder.Pack(embs[i]) });
         await db.SaveChangesAsync();
 
         await new MapLayout(db).ComputeAsync();
@@ -155,8 +155,8 @@ public class ImporterTests : IDisposable
     public async Task CoordinatesLandInRange()
     {
         using var db = NewDb();
-        foreach (var (name, emb) in new[] { ("A", "[1,0,0]"), ("B", "[0,1,0]"), ("C", "[0,0,1]"), ("D", "[1,1,1]") })
-            db.Perfumes.Add(new Perfume { Name = name, House = "H", EmbeddingJson = emb });
+        foreach (var (name, emb) in new[] { ("A", new float[] { 1, 0, 0 }), ("B", [0, 1, 0]), ("C", [0, 0, 1]), ("D", [1, 1, 1]) })
+            db.Perfumes.Add(new Perfume { Name = name, House = "H", Embedding = Embedder.Pack(emb) });
         await db.SaveChangesAsync();
         var result = await new MapLayout(db).ComputeAsync();
         Assert.StartsWith("Coordinates set for 4", result);
@@ -176,8 +176,8 @@ public class ImporterTests : IDisposable
         using var db = NewDb();
         for (var i = 0; i < 6; i++)
         {
-            db.Perfumes.Add(new Perfume { Name = $"A{i}", House = "H", EmbeddingJson = $"[1,0.0{i},0,0]" });
-            db.Perfumes.Add(new Perfume { Name = $"B{i}", House = "H", EmbeddingJson = $"[0.0{i},0,1,0]" });
+            db.Perfumes.Add(new Perfume { Name = $"A{i}", House = "H", Embedding = Embedder.Pack([1, i / 100f, 0, 0]) });
+            db.Perfumes.Add(new Perfume { Name = $"B{i}", House = "H", Embedding = Embedder.Pack([i / 100f, 0, 1, 0]) });
         }
         await db.SaveChangesAsync();
         await new MapLayout(db).ComputeAsync();
@@ -194,8 +194,8 @@ public class ImporterTests : IDisposable
     public async Task NeighboursAreClosestFirst()
     {
         using var db = NewDb();
-        foreach (var (name, emb) in new[] { ("A", "[1,0]"), ("Near", "[0.9,0.1]"), ("Far", "[0,1]") })
-            db.Perfumes.Add(new Perfume { Name = name, House = "H", EmbeddingJson = emb });
+        foreach (var (name, emb) in new[] { ("A", new float[] { 1, 0 }), ("Near", [0.9f, 0.1f]), ("Far", [0, 1]) })
+            db.Perfumes.Add(new Perfume { Name = name, House = "H", Embedding = Embedder.Pack(emb) });
         await db.SaveChangesAsync();
         await new MapLayout(db).ComputeAsync();
         var all = await db.Perfumes.ToDictionaryAsync(p => p.Name);

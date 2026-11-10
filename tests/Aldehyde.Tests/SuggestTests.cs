@@ -92,7 +92,7 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
     }
 
     [Fact]
-    public async Task VectorsDropEmbeddingJson()
+    public async Task VectorsDropEmbedding()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"aldehyde-vectors-{Guid.NewGuid()}.db");
         try
@@ -104,13 +104,13 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 db.Database.EnsureCreated();
-                db.Perfumes.Add(new Perfume { Name = "A", House = "H", EmbeddingJson = "[3,4]" });
+                db.Perfumes.Add(new Perfume { Name = "A", House = "H", Embedding = Embedder.Pack([3, 4]) });
                 db.SaveChanges();
             }
             var cache = new PerfumeCache(provider.GetRequiredService<IServiceScopeFactory>());
             var vectors = await cache.VectorsAsync();
             Assert.Single(vectors);
-            Assert.Null(vectors[0].Perfume.EmbeddingJson);
+            Assert.Null(vectors[0].Perfume.Embedding);
             Assert.True(Math.Abs(vectors[0].Unit[0] - 0.6f) < 0.001);
         }
         finally
@@ -215,9 +215,9 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             db.Perfumes.AddRange(
-                new Perfume { Name = "Closest", House = "H", Family = "woody", Accords = ["woody"], EmbeddingJson = "[1,0]" },
-                new Perfume { Name = "Second", House = "H", Family = "woody", Accords = ["amber"], EmbeddingJson = "[0.7,0.7]" },
-                new Perfume { Name = "Farthest", House = "H", Family = "aquatic", Accords = ["aquatic"], EmbeddingJson = "[0,1]" });
+                new Perfume { Name = "Closest", House = "H", Family = "woody", Accords = ["woody"], Embedding = Embedder.Pack([1, 0]) },
+                new Perfume { Name = "Second", House = "H", Family = "woody", Accords = ["amber"], Embedding = Embedder.Pack([0.7f, 0.7f]) },
+                new Perfume { Name = "Farthest", House = "H", Family = "aquatic", Accords = ["aquatic"], Embedding = Embedder.Pack([0, 1]) });
             db.SaveChanges();
         }
 

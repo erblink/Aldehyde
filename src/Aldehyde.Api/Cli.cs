@@ -4,10 +4,10 @@ namespace Aldehyde.Api;
 
 static class Cli
 {
-    const string Usage = "Usage: import <dataset.json|jsonl|csv> [limit] | import-dupes <dupes.json> | embed | coords";
+    const string Usage = "Usage: import <dataset.json|jsonl|csv> [limit] | import-dupes <dupes.json> | embed | coords | convert-embeddings";
 
     public static bool IsCommand(string[] args) =>
-        args.Length > 0 && args[0] is "import" or "import-dupes" or "embed" or "coords";
+        args.Length > 0 && args[0] is "import" or "import-dupes" or "embed" or "coords" or "convert-embeddings";
 
     public static async Task<string> RunAsync(string[] args, IServiceProvider services, IConfiguration cfg)
     {
@@ -22,6 +22,7 @@ static class Cli
                 ["import-dupes", var path] => await new DupeImporter(db).ImportAsync(path),
                 ["embed"] => await EmbedAsync(db, cfg),
                 ["coords"] => await new MapLayout(db, Path.Combine(Path.GetTempPath(), "aldehyde-coords.json")).ComputeAsync(),
+                ["convert-embeddings"] => await new Embedder(db).ConvertJsonAsync(2000, TimeSpan.FromSeconds(20)),
                 _ => Usage,
             };
         }

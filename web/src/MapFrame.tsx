@@ -29,6 +29,7 @@ const NONE: Neighbour[] = []
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const fitZoom = (w: number, h: number) => Math.log2(Math.max(1, Math.min(w * 0.92, h - 130)) / 1000)
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const coarse = () => window.matchMedia('(pointer: coarse)').matches
 
 export default function MapFrame() {
   const stageRef = useRef<HTMLDivElement>(null)
@@ -218,12 +219,13 @@ export default function MapFrame() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  const offsetAt = (zoom: number) => (wide ? (size.w * (0.5 - COLUMN / 2)) / 2 ** zoom : 0)
+
   const flyTo = (x: number, y: number, zoomIn: boolean) => {
     if (!view) return
     const zoom = zoomIn ? Math.max(view.zoom, fit + 2) : view.zoom
-    const offset = wide ? (size.w * (0.5 - COLUMN / 2)) / 2 ** zoom : 0
     setView({
-      target: [x + offset, y],
+      target: [x + offsetAt(zoom), y],
       zoom,
       transitionDuration: reducedMotion() ? 0 : 800,
       transitionInterpolator: FLY,
@@ -270,16 +272,21 @@ export default function MapFrame() {
           <DeckGL
             views={VIEW}
             viewState={{ ...view, minZoom: fit - 0.5, maxZoom: fit + 5 }}
-            onViewStateChange={({ viewState: v }) => setView(v as View)}
+            onViewStateChange={({ viewState, interactionState }) => {
+              const v = viewState as View
+              if (interactionState.inTransition) return setView(v)
+              const m = offsetAt(v.zoom)
+              setView({ ...v, target: [clamp(v.target[0], -m, 1000 + m), clamp(v.target[1], 0, 1000)] })
+            }}
             controller={{
               scrollZoom: inView,
-              dragPan: true,
+              dragPan: inView || !coarse(),
               doubleClickZoom: true,
               keyboard: true,
             }}
             touchAction={inView ? 'none' : 'pan-y'}
             layers={layers}
-            pickingRadius={6}
+            pickingRadius={coarse() ? 14 : 6}
             useDevicePixels={Math.min(2, window.devicePixelRatio || 1)}
             onHover={(info: PickingInfo<MapPoint>) => setHovered(info.object?.id ?? null)}
             onClick={(info: PickingInfo<MapPoint>) => onMapClick(info.object)}

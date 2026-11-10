@@ -800,6 +800,15 @@ a:hover {
 }
 
 @media (max-width: 760px) {
+  .map-stage {
+    height: 86svh;
+  }
+
+  .search input,
+  .suggest input {
+    font-size: 16px;
+  }
+
   .map-empty {
     left: var(--gutter);
     right: var(--gutter);

@@ -19,9 +19,9 @@ public class MapLayout(AppDbContext db, string? cachePath = null)
             : null;
         if (layout is null || !layout.Ids.SequenceEqual(ids))
         {
-            var rows = await db.Perfumes.AsNoTracking().OrderBy(p => p.Id).Select(p => p.EmbeddingJson).ToListAsync();
+            var rows = await db.Perfumes.AsNoTracking().OrderBy(p => p.Id).Select(p => p.Embedding).ToListAsync();
             if (rows.Count != ids.Length || rows.Any(r => r is null)) return "Not all perfumes embedded. Coordinates not computed.";
-            var unit = rows.Select(r => Normalise(JsonSerializer.Deserialize<float[]>(r!)!)).ToArray();
+            var unit = rows.Select(r => Normalise(Embedder.Unpack(r!))).ToArray();
             rows.Clear();
             var (xs, ys) = Umap2(unit);
             layout = new Layout(ids, Scale(xs), Scale(ys), Nearest(unit, NeighbourCount));

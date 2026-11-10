@@ -17,7 +17,10 @@ public class Perfume
     public double X { get; set; }
     public double Y { get; set; }
     public List<int> NeighbourIds { get; set; } = [];
+    // shortcut: old float32 JSON copy, kept only until Aiven has run convert-embeddings and dropped the column; then delete it and that command.
     public string? EmbeddingJson { get; set; }
+    // Unit vector as little-endian float16 (Embedder.Pack): 2 KB per perfume instead of ~16 KB of JSON.
+    public byte[]? Embedding { get; set; }
     public IEnumerable<string> AllNotes => TopNotes.Concat(HeartNotes).Concat(BaseNotes);
 }
 
