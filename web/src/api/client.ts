@@ -49,6 +49,6 @@ export const api = {
     return res.json() as Promise<Suggestion[]>
   },
   warm: () => {
-    fetch(`${base}/api/perfumes/0`).catch(() => {})
+    fetch(`${base}/api/warm`).catch(() => {})
   },
 }

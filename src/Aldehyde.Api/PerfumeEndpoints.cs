@@ -10,6 +10,7 @@ static class PerfumeEndpoints
         app.MapGet("/api/perfumes", GetAll);
         app.MapGet("/api/perfumes/{id:int}", GetDetail);
         app.MapGet("/api/search", Search);
+        app.MapGet("/api/warm", Warm);
         app.MapPost("/api/suggest", Suggest);
     }
 
@@ -32,6 +33,17 @@ static class PerfumeEndpoints
             .Select(d => new Dupe(d.DupeId, byId[d.DupeId].Name, d.Source, d.Votes, SharedNotes(p, byId[d.DupeId]))).ToList();
         return Results.Ok(new PerfumeDetail(p.Id, p.Name, p.House, p.Year, p.Strength, p.Perfumers,
             new Notes(p.TopNotes, p.HeartNotes, p.BaseNotes), p.Accords, p.Family, neighbours, dupes));
+    }
+
+    // The page calls this on load, so a fresh replica has every cache ready before the first tap, search or suggestion.
+    // Vectors go last: they take longest, and the other caches skip the lock once loaded.
+    static async Task<IResult> Warm(PerfumeCache cache)
+    {
+        await cache.ByIdAsync();
+        await cache.DupesAsync();
+        await cache.IndexAsync();
+        await cache.VectorsAsync();
+        return Results.NoContent();
     }
 
     static async Task<IResult> Search(string? q, PerfumeCache cache)
