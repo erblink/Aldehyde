@@ -44,8 +44,7 @@ public class PerfumeImporter(AppDbContext db)
             p.TopNotes = r.Notes?.Top ?? r.TopNotes ?? [];
             p.HeartNotes = r.Notes?.Heart ?? r.HeartNotes ?? [];
             p.BaseNotes = r.Notes?.Base ?? r.BaseNotes ?? [];
-            // Clear both, or convert-embeddings would refill Embedding from the stale JSON.
-            if (Embedder.BuildText(p) != embeddedText) { p.Embedding = null; p.EmbeddingJson = null; }
+            if (Embedder.BuildText(p) != embeddedText) p.Embedding = null;
         }
         await db.SaveChangesAsync();
         var counts = db.Perfumes.GroupBy(p => p.Family).Select(g => $"{g.Key}:{g.Count()}");

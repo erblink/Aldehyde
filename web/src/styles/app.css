@@ -642,10 +642,18 @@ a:hover {
   color: var(--dusk);
 }
 
-.family-key {
+.map-key {
   position: absolute;
   left: var(--gutter);
   bottom: 28px;
+}
+
+.map-key .note-filter {
+  width: 200px;
+  margin-top: 10px;
+}
+
+.family-key {
   display: flex;
   flex-direction: column;
   margin: 0;

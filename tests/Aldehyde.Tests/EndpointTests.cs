@@ -31,9 +31,11 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
     public async Task UnknownPerfumeReturns404() =>
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/perfumes/9999")).StatusCode);
 
-    [Fact]
-    public async Task EmptySearchReturns400() =>
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/search?q=")).StatusCode);
+    [Theory]
+    [InlineData("")]
+    [InlineData("musk ")]
+    public async Task EmptyOrHugeSearchReturns400(string word) =>
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/api/search?q={string.Concat(Enumerable.Repeat(word, 30))}")).StatusCode);
 
     [Fact]
     public async Task SearchFindsNote()
@@ -61,6 +63,20 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
         using var doc = JsonDocument.Parse(json);
         Assert.Equal(0, doc.RootElement.GetArrayLength());
     }
+
+    [Theory]
+    [InlineData("BÉRGAMOT", 2)]
+    [InlineData("berg", 0)]
+    public async Task NoteFilterMatchesWholeNoteWords(string q, int count)
+    {
+        var json = await client.GetStringAsync($"/api/notes?q={Uri.EscapeDataString(q)}");
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(count, doc.RootElement.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task EmptyNoteFilterReturns400() =>
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/notes?q=")).StatusCode);
 
     [Fact]
     public async Task DetailOrdersDupesHouseCommunitySuggested()
@@ -120,6 +136,9 @@ public class EndpointTests : IClassFixture<EndpointTests.Factory>
             db.Perfumes.AddRange(orig, house, comm, sugg);
             db.SaveChanges();
             orig.NeighbourIds = [house.Id, comm.Id];
+            house.NeighbourIds = comm.NeighbourIds = sugg.NeighbourIds = [orig.Id];
+            var unplaced = new Perfume { Name = "Unplaced", House = "C", TopNotes = ["bergamot"] };
+            db.Perfumes.Add(unplaced);
             db.SaveChanges();
             db.DupeLinks.AddRange(
                 new DupeLink { DupeId = sugg.Id, OriginalId = orig.Id, Source = "suggested", Votes = 99 },

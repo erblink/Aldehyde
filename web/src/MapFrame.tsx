@@ -7,6 +7,7 @@ import type { Family, MapPoint, Neighbour, PerfumeDetail, SearchResult } from '.
 import Detail from './Detail'
 import { FAMILIES, familyColours, type RGB } from './families'
 import { familyAnchors, placeNameLabels, placeNearLabels } from './mapLabels'
+import NoteFilter from './NoteFilter'
 import Search from './Search'
 import Suggest from './Suggest'
 import { shares } from './text'
@@ -37,6 +38,7 @@ export default function MapFrame() {
   const [points, setPoints] = useState<MapPoint[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [hidden, setHidden] = useState<Set<Family>>(new Set())
+  const [noteIds, setNoteIds] = useState<Set<number> | null>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [moved, setView] = useState<View | null>(null)
   const [inView, setInView] = useState(false)
@@ -118,6 +120,7 @@ export default function MapFrame() {
 
   const byId = useMemo(() => new Map((points ?? []).map((p) => [p.id, p])), [points])
   const visible = useMemo(() => (points ?? []).filter((p) => !hidden.has(p.family)), [points, hidden])
+  const named = useMemo(() => (noteIds ? visible.filter((p) => noteIds.has(p.id)) : visible), [visible, noteIds])
   const anchors = useMemo(() => familyAnchors(points ?? []), [points])
 
   const selPoint = selected != null ? byId.get(selected) : undefined
@@ -131,6 +134,7 @@ export default function MapFrame() {
     return new Set(ids.filter((id): id is number => id != null))
   }, [selected, hovered, selNeighbours, hovNeighbours])
   const litKey = [...lit].join(',')
+  const dimmed = (id: number) => noteIds != null && !noteIds.has(id) && !lit.has(id)
 
   const reserved = useMemo(() => new Set([...lit, ...near.map((n) => n.id)]), [lit, near])
 
@@ -139,8 +143,8 @@ export default function MapFrame() {
     view ? [(x - view.target[0]) * s + size.w / 2, (y - view.target[1]) * s + size.h / 2] : [0, 0]
 
   const nameLabels = useMemo(
-    () => (view && size.w ? placeNameLabels(visible, reserved, view, size, fit, edge) : []),
-    [view, size, fit, visible, reserved, edge],
+    () => (view && size.w ? placeNameLabels(named, reserved, view, size, fit, edge) : []),
+    [view, size, fit, named, reserved, edge],
   )
 
   const lines = useMemo(() => {
@@ -179,10 +183,10 @@ export default function MapFrame() {
       getPosition: (p) => [p.x, p.y],
       radiusUnits: 'pixels',
       radiusScale: radius,
-      getRadius: (p) => (!revealed ? 0 : lit.has(p.id) ? 1.6 : 1),
-      getFillColor: (p) => [...colours[p.family], lit.size === 0 || lit.has(p.id) ? 215 : 85],
+      getRadius: (p) => (!revealed ? 0 : lit.has(p.id) ? 1.6 : dimmed(p.id) ? 0.7 : 1),
+      getFillColor: (p) => [...colours[p.family], dimmed(p.id) ? 20 : lit.size === 0 || lit.has(p.id) ? 215 : 85],
       pickable: true,
-      updateTriggers: { getRadius: [litKey, revealed], getFillColor: litKey },
+      updateTriggers: { getRadius: [litKey, revealed, noteIds], getFillColor: [litKey, noteIds] },
       transitions: {
         getRadius: reducedMotion() ? 0 : settled ? 180 : { duration: 1400, easing: (t: number) => 1 - (1 - t) ** 3 },
       },
@@ -246,6 +250,26 @@ export default function MapFrame() {
   }
 
   const onPick = (r: SearchResult) => goTo(r.id)
+
+  // A query param, not the hash: the hash already drives the "#map" and "#" anchor links.
+  const linked = useRef(Number(new URLSearchParams(location.search).get('p')) || null)
+  const openLinked = useEffectEvent((id: number) => {
+    stageRef.current?.scrollIntoView({ block: 'start' })
+    goTo(id)
+  })
+  useEffect(() => {
+    const id = linked.current
+    if (id == null || !view || !byId.has(id)) return
+    linked.current = null
+    openLinked(id)
+  }, [view, byId])
+
+  useEffect(() => {
+    const url = new URL(location.href)
+    if (selected == null) url.searchParams.delete('p')
+    else url.searchParams.set('p', String(selected))
+    history.replaceState(history.state, '', url)
+  }, [selected])
 
   const toggle = (f: Family) =>
     setHidden((h) => {
@@ -341,6 +365,7 @@ export default function MapFrame() {
 
         {status && <p className="map-empty">{status}</p>}
 
+        <div className="map-key">
         <ul className="family-key" aria-label="Scent families">
           {FAMILIES.map((f) => (
             <li key={f.id} data-family={f.id}>
@@ -351,6 +376,8 @@ export default function MapFrame() {
             </li>
           ))}
         </ul>
+        <NoteFilter onChange={setNoteIds} shown={named.length} />
+        </div>
       </div>
 
       {current && (

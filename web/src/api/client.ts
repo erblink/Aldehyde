@@ -38,6 +38,7 @@ export const api = {
   },
   search: (q: string, signal?: AbortSignal) =>
     get<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`, signal),
+  byNote: (q: string, signal?: AbortSignal) => get<number[]>(`/api/notes?q=${encodeURIComponent(q)}`, signal),
   suggest: async (text: string, token: string, signal?: AbortSignal): Promise<Suggestion[]> => {
     const res = await fetch(`${base}/api/suggest`, {
       method: 'POST',

@@ -30,27 +30,6 @@ public class Embedder(AppDbContext db)
         return $"Embedded {done}. Missing 0.";
     }
 
-    public async Task<string> ConvertJsonAsync(int batchSize, TimeSpan pause)
-    {
-        var done = 0;
-        while (true)
-        {
-            var rows = await db.Perfumes.AsNoTracking()
-                .Where(p => p.Embedding == null && p.EmbeddingJson != null)
-                .OrderBy(p => p.Id).Take(batchSize)
-                .Select(p => new { p.Id, p.EmbeddingJson }).ToListAsync();
-            foreach (var r in rows)
-                db.Attach(new Perfume { Id = r.Id, Embedding = Pack(JsonSerializer.Deserialize<float[]>(r.EmbeddingJson!)!) })
-                    .Property(p => p.Embedding).IsModified = true;
-            await db.SaveChangesAsync();
-            db.ChangeTracker.Clear();
-            done += rows.Count;
-            if (rows.Count < batchSize) return $"Converted {done}.";
-            // Gives Aiven time to archive and recycle WAL; one big burst once filled the 1 GB disk.
-            await Task.Delay(pause);
-        }
-    }
-
     public static byte[] Pack(float[] vector)
     {
         var unit = MapLayout.Normalise(vector);

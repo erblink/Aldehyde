@@ -10,6 +10,7 @@ static class PerfumeEndpoints
         app.MapGet("/api/perfumes", GetAll);
         app.MapGet("/api/perfumes/{id:int}", GetDetail);
         app.MapGet("/api/search", Search);
+        app.MapGet("/api/notes", ByNote);
         app.MapGet("/api/warm", Warm);
         app.MapPost("/api/suggest", Suggest);
     }
@@ -49,9 +50,18 @@ static class PerfumeEndpoints
     static async Task<IResult> Search(string? q, PerfumeCache cache)
     {
         var phrase = PerfumeSearch.Fold(q ?? "");
-        if (phrase.Length == 0) return Results.BadRequest();
+        if (phrase.Length is 0 or > 100) return Results.BadRequest();
         var hits = PerfumeSearch.Find(phrase, await cache.IndexAsync(), 30);
         return Results.Ok(hits.Select(e => new SearchResult(e.Perfume.Id, e.Perfume.Name, e.Perfume.House)).ToList());
+    }
+
+    static async Task<IResult> ByNote(string? q, PerfumeCache cache, HttpContext ctx)
+    {
+        var phrase = PerfumeSearch.Fold(q ?? "");
+        if (phrase.Length is < 2 or > 40) return Results.BadRequest();
+        var whole = $" {phrase} ";
+        ctx.Response.Headers.CacheControl = "public, max-age=300";
+        return Results.Ok((await cache.IndexAsync()).Where(e => e.Notes.Contains(whole, StringComparison.Ordinal)).Select(e => e.Perfume.Id).ToList());
     }
 
     static async Task<IResult> Suggest(SuggestRequest? req, PerfumeCache cache, IQueryEmbedder embedder,

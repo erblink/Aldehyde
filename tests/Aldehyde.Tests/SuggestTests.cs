@@ -104,7 +104,7 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 db.Database.EnsureCreated();
-                db.Perfumes.Add(new Perfume { Name = "A", House = "H", Embedding = Embedder.Pack([3, 4]) });
+                db.Perfumes.Add(new Perfume { Name = "A", House = "H", Embedding = Embedder.Pack([3, 4]), NeighbourIds = [1] });
                 db.SaveChanges();
             }
             var cache = new PerfumeCache(provider.GetRequiredService<IServiceScopeFactory>());
@@ -215,9 +215,9 @@ public class SuggestTests : IClassFixture<SuggestTests.Factory>
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             db.Perfumes.AddRange(
-                new Perfume { Name = "Closest", House = "H", Family = "woody", Accords = ["woody"], Embedding = Embedder.Pack([1, 0]) },
-                new Perfume { Name = "Second", House = "H", Family = "woody", Accords = ["amber"], Embedding = Embedder.Pack([0.7f, 0.7f]) },
-                new Perfume { Name = "Farthest", House = "H", Family = "aquatic", Accords = ["aquatic"], Embedding = Embedder.Pack([0, 1]) });
+                new Perfume { Name = "Closest", House = "H", Family = "woody", Accords = ["woody"], Embedding = Embedder.Pack([1, 0]), NeighbourIds = [2] },
+                new Perfume { Name = "Second", House = "H", Family = "woody", Accords = ["amber"], Embedding = Embedder.Pack([0.7f, 0.7f]), NeighbourIds = [1] },
+                new Perfume { Name = "Farthest", House = "H", Family = "aquatic", Accords = ["aquatic"], Embedding = Embedder.Pack([0, 1]), NeighbourIds = [2] });
             db.SaveChanges();
         }
 

@@ -51,27 +51,6 @@ public class EmbedderTests : IDisposable
     }
 
     [Fact]
-    public async Task ConvertFillsOnlyMissingEmbeddings()
-    {
-        using (var db = NewDb())
-        {
-            db.Perfumes.Add(new Perfume { Name = "A", House = "H", EmbeddingJson = "[3,4]" });
-            db.Perfumes.Add(new Perfume { Name = "B", House = "H", EmbeddingJson = "[3,4]" });
-            db.Perfumes.Add(new Perfume { Name = "C", House = "H", EmbeddingJson = "[3,4]", Embedding = Embedder.Pack([0, 1]) });
-            await db.SaveChangesAsync();
-        }
-        string result;
-        using (var db = NewDb()) result = await new Embedder(db).ConvertJsonAsync(1, TimeSpan.Zero);
-
-        Assert.Equal("Converted 2.", result);
-        using var check = NewDb();
-        var all = await check.Perfumes.ToDictionaryAsync(p => p.Name);
-        var a = Embedder.Unpack(all["A"].Embedding!);
-        Assert.True(Math.Abs(a[0] - 0.6f) < 0.001 && Math.Abs(a[1] - 0.8f) < 0.001);
-        Assert.Equal(Embedder.Pack([0, 1]), all["C"].Embedding);
-    }
-
-    [Fact]
     public async Task CapStopsBeforeCallingTheApi()
     {
         await Seed(10);

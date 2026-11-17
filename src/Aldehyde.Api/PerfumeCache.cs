@@ -26,7 +26,8 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
 
     public async Task<ILookup<int, DupeLink>> DupesAsync() => dupes ?? await Locked(async () => dupes ??= await LoadDupesAsync());
 
-    public async Task<List<VectorEntry>> VectorsAsync() => vectors ?? await Locked(async () => vectors ??= await LoadVectorsAsync());
+    public async Task<List<VectorEntry>> VectorsAsync() =>
+        vectors ?? await Locked(async () => vectors ??= await LoadVectorsAsync((all ??= await LoadAllAsync()).Select(p => p.Id).ToHashSet()));
 
     async Task<T> Locked<T>(Func<Task<T>> load)
     {
@@ -41,7 +42,8 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         // Sort here: Ratings has no index, so ordering by it in SQL makes the small DB sort every row.
         var perfumes = await WithoutEmbedding(db).OrderBy(p => p.Id).ToListAsync();
-        return perfumes.OrderByDescending(p => p.Ratings).ToList();
+        // No neighbours means coords has not run for it yet: it would sit at (0, 0) in the map's corner.
+        return perfumes.Where(p => p.NeighbourIds.Count > 0).OrderByDescending(p => p.Ratings).ToList();
     }
 
     async Task<ILookup<int, DupeLink>> LoadDupesAsync()
@@ -51,7 +53,7 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
         return (await db.DupeLinks.AsNoTracking().ToListAsync()).ToLookup(d => d.OriginalId);
     }
 
-    async Task<List<VectorEntry>> LoadVectorsAsync()
+    async Task<List<VectorEntry>> LoadVectorsAsync(HashSet<int> placed)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -66,6 +68,7 @@ public sealed class PerfumeCache(IServiceScopeFactory scopes)
             while (await reader.ReadAsync())
             {
                 var id = reader.GetInt32(0);
+                if (!placed.Contains(id)) continue;
                 var name = reader.GetString(1);
                 var house = reader.GetString(2);
                 var family = reader.GetString(3);

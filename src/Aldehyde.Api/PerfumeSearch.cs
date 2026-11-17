@@ -4,7 +4,7 @@ using Aldehyde.Data;
 
 namespace Aldehyde.Api;
 
-public record SearchEntry(Perfume Perfume, string Name, string NameAndHouse, string Everything);
+public record SearchEntry(Perfume Perfume, string Name, string NameAndHouse, string Everything, string Notes);
 
 public static class PerfumeSearch
 {
@@ -18,7 +18,9 @@ public static class PerfumeSearch
             var name = Fold(p.Name);
             var nameAndHouse = $"{name} {Fold(p.House)}";
             return new SearchEntry(p, $" {name} ", $" {nameAndHouse} ",
-                $" {nameAndHouse} {Fold(string.Join(' ', p.AllNotes.Concat(p.Accords)))} ");
+                $" {nameAndHouse} {Fold(string.Join(' ', p.AllNotes.Concat(p.Accords)))} ",
+                // The comma stops a phrase matching across two notes ("rose oud" from "Turkish Rose", "Oud").
+                $" {string.Join(" , ", p.AllNotes.Select(Fold))} ");
         }).ToList();
 
     public static List<SearchEntry> Find(string phrase, List<SearchEntry> index, int count)
