@@ -422,10 +422,13 @@ a:hover {
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  max-height: 60svh;
+  max-height: min(420px, 50svh);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline) transparent;
   margin: 0;
-  padding: 6px 0;
+  padding: 6px 12px 6px 0;
   list-style: none;
   background: var(--midnight);
   border-bottom: 1px solid var(--hairline);
